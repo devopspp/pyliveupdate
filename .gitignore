@@ -1,0 +1,11 @@
+*.egg*
+*.pyc
+*.pyo
+*.swp
+*.log
+build
+dist
+docs/_build
+__pycache__
+.tox
+.ipynb_checkpoints
