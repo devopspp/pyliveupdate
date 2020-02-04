@@ -13,7 +13,7 @@ setuptools.setup(
     #long_description_content_type="text/markdown",
     url="https://github.com/devopspp/pyliveupdate",
     license='GPLv3',
-    packages=setuptools.find_packages(exclude=['tests', 'experimental']),
+    packages=setuptools.find_packages(exclude=['tests', 'experimental', 'examples']),
     python_requires='>=3.6',
     install_requires=[
         'bytecode',
