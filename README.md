@@ -24,15 +24,9 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 pip install pyliveupdate
 ```
 
-#### import our library in your main module
-```	
-from pyliveupdate import *
-// Your python code
-```
-
 ### How to use
 We currently implemented function profiling and are implementing more.
-Please feel free to let us know if you find other features useful.
+Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/1.
 
 #### profile function call time
 
@@ -69,7 +63,7 @@ revert(1)
 
 
 ### Known Users
-Welcome to register your company name here: https://github.com/EvonX/pyframe/issues/23
+Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
 
 ### Credit
 #### Projects
