@@ -3,9 +3,7 @@
 
 PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
-![image](https://github.com/EvonX/pyframe/blob/master/image/ep1.png)
-
-### Key features
+### Key features (under developing)
 
 * Profile specific (by name) Python functions call time.
 * Check the function invocation details such as function parameters, return object, local variables and etc.
@@ -26,56 +24,47 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 pip install pyliveupdate
 ```
 
-#### import our library in your main module
-```	
-from pyliveupdate import *
-// Your python code
-```
-
-### Feature Showcase
+### How to use
+We currently implemented function profiling and are implementing more.
+Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
 
 #### profile function call time
 
-```	
-from pyliveupdate_server import *
-update = Update('instrument', ['func1', 'func2'], 
-         {'func_begin':func_begin, 'func_end':func_end},
-          None, None, __name__)
-UpdateManager.apply_update(update)
+1. Start pyliveupdate server
 ```
-
-#### add logs to a function 
-
+pylu-server --logserver
+```
+2. In your program (like examples/program1.py) main module add 
 ```	
 from pyliveupdate import *
-log_statement = '"Debug info: ", variable
-updater = Update("add_log", "func_end", [func_name], log_statement)
-updater.apply_update()
+client.UpdateClient().start()
 ```
-
-#### create your own payload
-
-```	
-from pyliveupdate import *
-
-def func_begin():
-    from time import time;
-    global start
-    start = time()
-    print(time())
-    
-def func_end():
-    from time import time;
-    global start
-    print(time()-start)
-
-updater=Update([func_name], func_begin, func_end)
-updater.apply_update()
+3. Run your program (make sure in the correct directory)
+```
+cd examples
+python program1.py
+```
+4. Start profile one function on the server side
+```
+instru('__main__.bar')
+```
+or any functions
+```
+instru('**')
+```
+5. Check output in either your program output or `/tmp/instru.log`
+6. List applied profiling
+```
+listinstru
+```
+7. Stop a profiling by its id without stop your program
+```
+revert(1)
 ```
 
 
 ### Known Users
-Welcome to register your company name here: https://github.com/EvonX/pyframe/issues/23
+Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
 
 ### Credit
 #### Projects
