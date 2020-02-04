@@ -29,7 +29,7 @@ setuptools.setup(
           'Intended Audience :: Developers',
           'Intended Audience :: System Administrators',
           'License :: OSI Approved :: GNU General Public License (GPL)',
-          'Topic :: System :: Logging'
+          'Topic :: System :: Logging',
           'Topic :: System :: Monitoring',
           'Topic :: Software Development :: Libraries :: Python Modules',
           'Topic :: Software Development :: Debuggers',
