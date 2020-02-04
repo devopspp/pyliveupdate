@@ -26,7 +26,7 @@ pip install pyliveupdate
 
 ### How to use
 We currently implemented function profiling and are implementing more.
-Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/1.
+Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
 
 #### profile function call time
 
