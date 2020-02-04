@@ -44,19 +44,20 @@ client.UpdateClient().start()
 cd examples
 python program1.py
 ```
-4. Start profile one function ('modulename.functionname')
+4. Start profile one function on the server side
 ```
-instru('*.bar')
+instru('__main__.bar')
 ```
 or any functions
 ```
 instru('**')
 ```
-5. List applied profiling
+5. Check output in either your program output or `instru.log`
+6. List applied profiling
 ```
 listinstru
 ```
-6. Stop a profiling by its id without stop your program
+7. Stop a profiling by its id without stop your program
 ```
 revert(1)
 ```
