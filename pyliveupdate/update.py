@@ -236,14 +236,14 @@ class Update(object):
         
     def revert(self):
         for target, codeobj in self.old_codes.items():
-            if inspect.isfunction(target) and hasattr(target.__code__, '__code__'):
+            if inspect.isfunction(target) and hasattr(target, '__code__'):
                 target.__code__ = codeobj
-            elif inspect.ismethod(target) and hasattr(target.__func__.__code__, '__code__'):
+            elif inspect.ismethod(target) and hasattr(target.__func__, '__code__'):
                 target.__func__.__code__ = codeobj
         self.applied = False
     
     def __repr__(self):
-        return '{}, {}, {}'.format(self.type, self.target_name, self.target)
+        return '{}, {}, {}'.format(self.type, self.target_name, self.targets)
 
 class UpdateManager(object):
     updates = {}  #{update_id: update}

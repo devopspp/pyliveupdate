@@ -4,7 +4,7 @@ import traceback
 import threading
 from code import InteractiveConsole
 from io import StringIO
-from pyliveupdate import IPC, Update
+from pyliveupdate import *
 
 class DistantInteractiveConsole(InteractiveConsole):
     def __init__(self, ipc):

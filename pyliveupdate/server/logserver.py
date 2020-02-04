@@ -44,9 +44,8 @@ class LogRecordStreamHandler(socketserver.StreamRequestHandler):
 #                 - %(pathname)s - %(module)s - %(funcName)s - %(lineno)s\n\
 #                 - %(message)s\n''')
             f_format =logging.Formatter(
-                '%(asctime)s - %(processName)s - %(process)s - %(threadName)s'\
-                +'- %(pathname)s - %(module)s - %(funcName)s - %(lineno)s - %(message)s\n')
-
+                '%(asctime)s, %(processName)s, %(process)s, %(threadName)s, '+\
+                '%(pathname)s, %(lineno)s, %(module)s, %(funcName)s, %(message)s\n')
             f_handler.setFormatter(f_format)
             logger.addHandler(f_handler)
         
