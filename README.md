@@ -52,7 +52,7 @@ or any functions
 ```
 instru('**')
 ```
-5. Check output in either your program output or `instru.log`
+5. Check output in either your program output or `/tmp/instru.log`
 6. List applied profiling
 ```
 listinstru
