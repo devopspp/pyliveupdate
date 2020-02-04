@@ -67,7 +67,7 @@ class TargetFilter(object):
         if objmod.__name__ == '__main__':
             return True
         ### builtin moduel doesn't have __file__###
-        elif hasattr(objmod, '__file__') \
+        elif hasattr(objmod, '__file__') and objmod.__file__\
             and os.path.realpath(objmod.__file__).startswith(target):
             return True
         else:
