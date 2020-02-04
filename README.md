@@ -1,9 +1,7 @@
-# pyupdate
-`PyUpdate` is a Python online bugfixing, debugging and profiling tool open sourced by devopspp.
+# pyliveupdate
+`PyLiveUpdate` is a Python runtime monitoring, profiling, debugging and bugfixing tool under development.
 
-PyUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the servers.
-
-We are under heavy developing. 
+PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
 ![image](https://github.com/EvonX/pyframe/blob/master/image/ep1.png)
 
@@ -25,12 +23,12 @@ We are under heavy developing.
 #### Install
 
 ```
-pip install pyupdate
+pip install pyliveupdate
 ```
 
 #### import our library in your main module
 ```	
-from pyupdate import *
+from pyliveupdate import *
 // Your python code
 ```
 
@@ -39,16 +37,18 @@ from pyupdate import *
 #### profile function call time
 
 ```	
-from pyupdate_server import *
-updater = Update([func_name],  "call time")
-updater.apply_update()
+from pyliveupdate_server import *
+update = Update('instrument', ['func1', 'func2'], 
+         {'func_begin':func_begin, 'func_end':func_end},
+          None, None, __name__)
+UpdateManager.apply_update(update)
 ```
 
 #### add logs to a function 
 
 ```	
-from pyupdate_server import *
-log_statement = '"Debug info: ", variable'
+from pyliveupdate import *
+log_statement = '"Debug info: ", variable
 updater = Update("add_log", "func_end", [func_name], log_statement)
 updater.apply_update()
 ```
@@ -56,7 +56,7 @@ updater.apply_update()
 #### create your own payload
 
 ```	
-from pyupdate_server install *
+from pyliveupdate import *
 
 def func_begin():
     from time import time;
