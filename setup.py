@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/devopspp/pyliveupdate",
     license='GPLv3',
     packages=setuptools.find_packages(exclude=['tests', 'experimental', 'examples']),
-    python_requires='>=3.6',
+    python_requires='>=3.5',
     install_requires=[
         'bytecode',
         'stdlib_list',
