@@ -1,10 +1,11 @@
 import os, sys, time
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 ## add these two lines to your own code
 from pyliveupdate import *
-client.UpdateClient().start()
+UpdateStub().start()
 
-from module1 import foo
+from module1 import *
 
 def bar(a):
     print('bar', a)
