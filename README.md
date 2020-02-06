@@ -30,8 +30,6 @@ Please feel free to let us know if you find other features useful: https://githu
 
 #### profile function call time
 
-#### profile function call time
-
 1. Start pyliveupdate server
 ```
 pylu-controller
