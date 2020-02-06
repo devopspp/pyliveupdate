@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyliveupdate", 
-    version="0.1.2",
+    version="0.1.3",
     author="devopspp",
     keywords='runtime instrumentation logging profiling debugging',
     description="A tool to manipulate python code at runtime for logging, profiling, debugging, etc.",
