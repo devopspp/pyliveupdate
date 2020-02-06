@@ -32,36 +32,36 @@ Please feel free to let us know if you find other features useful: https://githu
 
 1. Start pyliveupdate server
 ```
-pylu-server --logserver
+pylu-controller
 ```
 2. In your program (like examples/program1.py) main module add 
 ```	
 from pyliveupdate import *
-client.UpdateClient().start()
+UpdateStub().start()
 ```
 3. Run your program (make sure in the correct directory)
 ```
 cd examples
 python program1.py
 ```
-4. Start profile one function on the server side
+4. Start profile a set of functions
 ```
-instru('__main__.bar')
+FP.profile(['__main__.**', 'module1.**'])
 ```
-or any functions
+or
+any functions
 ```
-instru('**')
+FuncProfiler.profile('**')
 ```
-5. Check output in either your program output or `/tmp/instru.log`
+5. Check output in either your program output or `/tmp/pyliveupdate.log`
 6. List applied profiling
 ```
-listinstru
+FP.ls()
 ```
-7. Stop a profiling by its id without stop your program
+7. Stop a profiling by its id without stopping your program
 ```
-revert(1)
+FP.revert(1)
 ```
-
 
 ### Known Users
 Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
