@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package updatestub;
+
+service RemoteEval {
+    rpc send_eval(SendEvalRequest) returns (SendEvalResponse) {}
+}
+
+enum ReturnCode {
+    SUCCESS = 0;
+    FAILURE = 1;
+}
+
+message SendEvalRequest {
+    string expression = 1;
+}
+
+message SendEvalResponse {
+    string result = 1;
+    ReturnCode returncode = 2;
+}

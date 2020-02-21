@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package updateregister;
+
+service StubRegister {
+    rpc send_register(SendRegisterRequest) returns (SendRegisterResponse) {}
+}
+
+enum ReturnCode {
+    SUCCESS = 0;
+    FAILURE = 1;
+}
+
+message SendRegisterRequest {
+    string ip = 1;
+    string port = 2;
+}
+
+message SendRegisterResponse {
+    ReturnCode returncode = 2;
+}

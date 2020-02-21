@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyliveupdate", 
-    version="0.1.4",
+    version="0.2.0",
     author="devopspp",
     keywords='runtime instrumentation logging profiling debugging',
     description="A tool to manipulate python code at runtime for logging, profiling, debugging, etc.",
@@ -21,7 +21,8 @@ setuptools.setup(
       ],
     entry_points="""
           [console_scripts]
-          pylu-controller = pyliveupdate.startcontroller:main
+          pylu-controller = pyliveupdate.controller.startcontroller:main
+          pylu-processlogs = pyliveupdatescripts.processfunclogs:main
       """,
     classifiers=[
           'Development Status :: 3 - Alpha',
@@ -34,5 +35,6 @@ setuptools.setup(
           'Topic :: Software Development :: Libraries :: Python Modules',
           'Topic :: Software Development :: Debuggers',
           'Programming Language :: Python :: 3',
-      ]
+      ],
+    scripts=['pyliveupdatescripts/flamegraph.pl']
 )

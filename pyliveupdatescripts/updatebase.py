@@ -1,4 +1,5 @@
 from pyliveupdate import *
+from pyliveupdatescripts import *
 
 class UpdateBase():
     @staticmethod
@@ -12,7 +13,10 @@ class UpdateBase():
     @staticmethod
     def ls():
         for updateid, update in UpdateManager.updates.items():
-            print(updateid, ':', update)
+            if update.applied:
+                print()
+                print(updateid, ':', update)
+            print()
     
     @staticmethod
     def register_builtin(vars_):
@@ -22,5 +26,7 @@ class UpdateBase():
         '''
         for item in vars_:
             if __builtins__.get(item) == None and item[:2] != '__':
-                # print('ADD TO BUILTIN:', item)
+#                 print('ADD TO BUILTIN:', item)
                 __builtins__[item] = vars_[item]
+                
+UpdateBase.register_builtin(globals())

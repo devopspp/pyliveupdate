@@ -1,4 +1,4 @@
-import logging, logging.handlers, queue, time, os
+import logging, logging.handlers, queue, time, os, sys
 
 class mysocketHandler(logging.handlers.SocketHandler):
     def emit(self, record):
@@ -29,11 +29,11 @@ def get_remote_logger(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGIN
 
 def get_local_logger():
     logger = logging.getLogger(__name__+'.local_logger')
-    c_handler = logging.StreamHandler()
+    c_handler = logging.StreamHandler(stream = sys.__stderr__)
     c_handler.setLevel(logging.INFO)
     c_format =logging.Formatter(
 #                 '%(asctime)s - %(processName)s - %(process)s - %(threadName)s -'+\
-                '%(pathname)s, %(lineno)s, %(module)s.%(funcName)s: %(message)s\n')
+                '%(pathname)s, %(lineno)s, %(module)s.%(funcName)s: %(message)s')
     c_handler.setFormatter(c_format)
     logger.setLevel(logging.INFO)
     logger.addHandler(c_handler)
