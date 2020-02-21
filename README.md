@@ -51,7 +51,7 @@ FP.profile(['__main__.**', 'module1.**'])
 or
 any functions
 ```
-FuncProfiler.profile('**')
+FP.profile('**')
 ```
 5. Check output in either your program output or `/tmp/pyliveupdate.log`
 6. List applied profiling
