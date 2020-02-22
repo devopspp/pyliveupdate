@@ -47,7 +47,9 @@ class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
 
 def start_logger(host='localhost',
                  port=logging.handlers.DEFAULT_TCP_LOGGING_PORT, logfile='/tmp/pyliveupdate.log'):
-    f_handler = logging.FileHandler(logfile, 'w')
+    # f_handler = logging.FileHandler(logfile, 'w')
+    f_handler = logging.handlers.RotatingFileHandler(logfile, backupCount=50)
+    f_handler.doRollover()
     f_handler.setLevel(logging.INFO)
     # f_format = logging.Formatter('''%(asctime)s - %(name)s - %(levelname)s\n\
     #     - %(processName)s - %(process)s - %(threadName)s\n\
@@ -61,6 +63,5 @@ def start_logger(host='localhost',
     logger.addHandler(f_handler)
     
     tcpserver = LogRecordSocketReceiver(host, port, LogRecordStreamHandler)
-    print('Start logging server: process {} listens on {}:{} '.format(os.getpid(), host, port))
-
+    print('Start logging server: process {} listens on {}:{}'.format(os.getpid(), host, port))
     tcpserver.serve_until_stopped()
