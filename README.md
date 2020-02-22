@@ -3,25 +3,30 @@
 
 PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
+### Demo
+[![asciicast](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy)
+
 ### Key features (under developing)
 
-* Profile specific (by name) Python functions call time.
+* Profile specific Python functions (by function names or module names) call time.
 * Check the function invocation details such as function parameters, return object, local variables and etc.
 * Add logs to specific functions
 * Dynamic patching a function
 
 ### Quick start
 
-#### Requirements
-* [bytecode](https://github.com/vstinner/bytecode)
-
 #### Compatibility
-* Supports Python 3.6+ on Linux. 
+* Supports Python 3.5+ on Linux. 
 
 #### Install
 
 ```
 pip install pyliveupdate
+```
+or
+```
+git clone https://github.com/devopspp/pyliveupdate.git
+pip install -e pyliveupdate
 ```
 
 ### How to use
@@ -37,6 +42,7 @@ pylu-controller
 2. In your program (like examples/program1.py) main module add 
 ```	
 from pyliveupdate import *
+from pyliveupdatescripts import *
 UpdateStub().start()
 ```
 3. Run your program (make sure in the correct directory)
@@ -62,10 +68,12 @@ FP.ls()
 ```
 FP.revert(1)
 ```
+8. Process the logs to generate a summary and a flamegraph
+```
+pylu-processlogs -i /tmp/pyliveupdate.log
+```
+9. View the generated call summary and flamegraph
+
 
 ### Known Users
 Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
-
-### Credit
-#### Projects
-* [pyrasite](https://github.com/lmacken/pyrasite): Inject code into running Python processes.
