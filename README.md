@@ -36,7 +36,7 @@ Please feel free to let us know if you find other features useful: https://githu
 
 1. Start pyliveupdate server
 ```
-pylu-controller
+pylu-controller -l
 ```
 2. In your program (like examples/program1.py) main module add 
 ```	
