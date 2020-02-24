@@ -1,0 +1,2852 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="358" onload="init(evt)" viewBox="0 0 1200 358" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+	}
+
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom();
+			zoom(target);
+		}
+		else if (e.target.id == "unzoom") unzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	}, false)
+
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+		return;
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x = txt.length - 2; x > 0; x--) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom() {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+		search();
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) {
+				currentSearchTerm = term;
+				search();
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (currentSearchTerm === null) return;
+		var term = currentSearchTerm;
+
+		var re = new RegExp(term, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="358.0" fill="url(#background)"  />
+<text id="title" x="600.00" y="24" >Flame Graph</text>
+<text id="details" x="10.00" y="341" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1090.00" y="24" >Search</text>
+<text id="ignorecase" x="1174.00" y="24" >ic</text>
+<text id="matched" x="1090.00" y="341" > </text>
+<g id="frames">
+<g >
+<title>lookups.__init__`hit10 (34 ms, 1.22%)</title><rect x="93.5" y="149" width="14.4" height="15.0" fill="rgb(246,81,38)" rx="2" ry="2" />
+<text  x="96.47" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_prep_value`hit10 (0 ms, 0.00%)</title><rect x="823.8" y="53" width="0.1" height="15.0" fill="rgb(210,227,22)" rx="2" ry="2" />
+<text  x="826.81" y="63.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (16 ms, 0.57%)</title><rect x="809.2" y="85" width="6.6" height="15.0" fill="rgb(224,127,30)" rx="2" ry="2" />
+<text  x="812.21" y="95.5" ></text>
+</g>
+<g >
+<title>query.chain`hit10 (6 ms, 0.22%)</title><rect x="534.9" y="181" width="2.4" height="15.0" fill="rgb(252,112,25)" rx="2" ry="2" />
+<text  x="537.91" y="191.5" ></text>
+</g>
+<g >
+<title>query._get_col`hit10 (8 ms, 0.29%)</title><rect x="710.6" y="165" width="3.5" height="15.0" fill="rgb(227,21,30)" rx="2" ry="2" />
+<text  x="713.55" y="175.5" ></text>
+</g>
+<g >
+<title>query.add_ordering`hit10 (0 ms, 0.00%)</title><rect x="591.0" y="229" width="0.1" height="15.0" fill="rgb(223,155,23)" rx="2" ry="2" />
+<text  x="593.95" y="239.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (1 ms, 0.04%)</title><rect x="537.0" y="149" width="0.3" height="15.0" fill="rgb(249,66,33)" rx="2" ry="2" />
+<text  x="539.96" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (0 ms, 0.00%)</title><rect x="556.1" y="133" width="0.2" height="15.0" fill="rgb(229,152,7)" rx="2" ry="2" />
+<text  x="559.10" y="143.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (17 ms, 0.61%)</title><rect x="114.3" y="165" width="7.1" height="15.0" fill="rgb(210,11,42)" rx="2" ry="2" />
+<text  x="117.26" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (4 ms, 0.14%)</title><rect x="1128.8" y="149" width="1.8" height="15.0" fill="rgb(248,139,29)" rx="2" ry="2" />
+<text  x="1131.84" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.set_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="242.9" y="53" width="0.1" height="15.0" fill="rgb(248,98,21)" rx="2" ry="2" />
+<text  x="245.90" y="63.5" ></text>
+</g>
+<g >
+<title>lookups.get_db_prep_lookup`hit10 (3 ms, 0.11%)</title><rect x="822.6" y="69" width="1.3" height="15.0" fill="rgb(216,28,51)" rx="2" ry="2" />
+<text  x="825.59" y="79.5" ></text>
+</g>
+<g >
+<title>compiler.results_iter`hit10 (47 ms, 1.68%)</title><rect x="1073.3" y="197" width="20.0" height="15.0" fill="rgb(252,206,32)" rx="2" ry="2" />
+<text  x="1076.30" y="207.5" ></text>
+</g>
+<g >
+<title>query.setup_joins`hit10 (35 ms, 1.25%)</title><rect x="121.7" y="165" width="14.9" height="15.0" fill="rgb(216,38,28)" rx="2" ry="2" />
+<text  x="124.70" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit10 (0 ms, 0.00%)</title><rect x="996.0" y="117" width="0.1" height="15.0" fill="rgb(210,28,49)" rx="2" ry="2" />
+<text  x="999.01" y="127.5" ></text>
+</g>
+<g >
+<title>manager.__init__`hit20 (16 ms, 0.57%)</title><rect x="1182.8" y="245" width="6.9" height="15.0" fill="rgb(247,74,32)" rx="2" ry="2" />
+<text  x="1185.77" y="255.5" ></text>
+</g>
+<g >
+<title>__init__.rel_db_type`hit10 (8 ms, 0.29%)</title><rect x="816.5" y="69" width="3.2" height="15.0" fill="rgb(205,160,42)" rx="2" ry="2" />
+<text  x="819.46" y="79.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="696.4" y="181" width="0.2" height="15.0" fill="rgb(228,178,0)" rx="2" ry="2" />
+<text  x="699.38" y="191.5" ></text>
+</g>
+<g >
+<title>query.add_q`hit10 (192 ms, 6.88%)</title><rect x="690.7" y="213" width="81.0" height="15.0" fill="rgb(232,211,17)" rx="2" ry="2" />
+<text  x="693.69" y="223.5" >query.add..</text>
+</g>
+<g >
+<title>query.order_by`hit10 (39 ms, 1.40%)</title><rect x="1159.6" y="245" width="16.6" height="15.0" fill="rgb(228,166,13)" rx="2" ry="2" />
+<text  x="1162.60" y="255.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (3 ms, 0.11%)</title><rect x="120.0" y="149" width="1.4" height="15.0" fill="rgb(220,195,42)" rx="2" ry="2" />
+<text  x="122.99" y="159.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="1158.9" y="165" width="0.1" height="15.0" fill="rgb(243,176,10)" rx="2" ry="2" />
+<text  x="1161.85" y="175.5" ></text>
+</g>
+<g >
+<title>query.resolve_lookup_value`hit10 (0 ms, 0.00%)</title><rect x="1144.2" y="165" width="0.2" height="15.0" fill="rgb(244,200,28)" rx="2" ry="2" />
+<text  x="1147.24" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit40 (1 ms, 0.04%)</title><rect x="891.7" y="165" width="0.5" height="15.0" fill="rgb(240,19,46)" rx="2" ry="2" />
+<text  x="894.65" y="175.5" ></text>
+</g>
+<g >
+<title>query.table_alias`hit10 (0 ms, 0.00%)</title><rect x="133.6" y="133" width="0.1" height="15.0" fill="rgb(214,26,54)" rx="2" ry="2" />
+<text  x="136.56" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (0 ms, 0.00%)</title><rect x="714.0" y="117" width="0.1" height="15.0" fill="rgb(252,107,22)" rx="2" ry="2" />
+<text  x="716.99" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.select_format`hit40 (11 ms, 0.39%)</title><rect x="870.0" y="133" width="4.8" height="15.0" fill="rgb(247,122,31)" rx="2" ry="2" />
+<text  x="873.01" y="143.5" ></text>
+</g>
+<g >
+<title>query.build_lookup`hit10 (21 ms, 0.75%)</title><rect x="1130.6" y="165" width="8.7" height="15.0" fill="rgb(229,57,51)" rx="2" ry="2" />
+<text  x="1133.56" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.results_iter`hit10 (51 ms, 1.83%)</title><rect x="338.1" y="213" width="21.6" height="15.0" fill="rgb(215,149,16)" rx="2" ry="2" />
+<text  x="341.06" y="223.5" >c..</text>
+</g>
+<g >
+<title>lookups.get_prep_lookup`hit10 (9 ms, 0.32%)</title><rect x="730.0" y="117" width="3.7" height="15.0" fill="rgb(233,77,19)" rx="2" ry="2" />
+<text  x="732.97" y="127.5" ></text>
+</g>
+<g >
+<title>query._get_col`hit10 (5 ms, 0.18%)</title><rect x="554.1" y="165" width="2.2" height="15.0" fill="rgb(250,47,3)" rx="2" ry="2" />
+<text  x="557.14" y="175.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="142.7" y="133" width="0.2" height="15.0" fill="rgb(206,15,53)" rx="2" ry="2" />
+<text  x="145.75" y="143.5" ></text>
+</g>
+<g >
+<title>expressions.select_format`hit40 (13 ms, 0.47%)</title><rect x="323.9" y="133" width="5.6" height="15.0" fill="rgb(235,88,4)" rx="2" ry="2" />
+<text  x="326.94" y="143.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (19 ms, 0.68%)</title><rect x="1167.7" y="213" width="8.2" height="15.0" fill="rgb(222,4,28)" rx="2" ry="2" />
+<text  x="1170.70" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit60 (2 ms, 0.07%)</title><rect x="479.1" y="85" width="0.9" height="15.0" fill="rgb(227,116,40)" rx="2" ry="2" />
+<text  x="482.07" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.get_distinct`hit10 (2 ms, 0.07%)</title><rect x="992.1" y="165" width="0.7" height="15.0" fill="rgb(241,45,19)" rx="2" ry="2" />
+<text  x="995.07" y="175.5" ></text>
+</g>
+<g >
+<title>datastructures.as_sql`hit10 (2 ms, 0.07%)</title><rect x="256.7" y="149" width="1.0" height="15.0" fill="rgb(212,154,10)" rx="2" ry="2" />
+<text  x="259.75" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit10 (0 ms, 0.00%)</title><rect x="827.7" y="133" width="0.1" height="15.0" fill="rgb(248,97,34)" rx="2" ry="2" />
+<text  x="830.68" y="143.5" ></text>
+</g>
+<g >
+<title>query.__len__`hit10 (434 ms, 15.55%)</title><rect x="911.2" y="245" width="183.4" height="15.0" fill="rgb(251,79,47)" rx="2" ry="2" />
+<text  x="914.23" y="255.5" >query.__len__`hit10</text>
+</g>
+<g >
+<title>query.deferred_to_data`hit10 (0 ms, 0.00%)</title><rect x="864.8" y="101" width="0.1" height="15.0" fill="rgb(244,178,33)" rx="2" ry="2" />
+<text  x="867.81" y="111.5" ></text>
+</g>
+<g >
+<title>query.get_compiler`hit10 (4 ms, 0.14%)</title><rect x="896.5" y="213" width="1.6" height="15.0" fill="rgb(231,55,44)" rx="2" ry="2" />
+<text  x="899.46" y="223.5" ></text>
+</g>
+<g >
+<title>manager.all`hit20 (276 ms, 9.89%)</title><rect x="655.4" y="261" width="116.6" height="15.0" fill="rgb(238,202,35)" rx="2" ry="2" />
+<text  x="658.43" y="271.5" >manager.all`hi..</text>
+</g>
+<g >
+<title>compiler.compile`hit30 (20 ms, 0.72%)</title><rect x="471.7" y="117" width="8.3" height="15.0" fill="rgb(215,178,17)" rx="2" ry="2" />
+<text  x="474.72" y="127.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="1112.7" y="181" width="0.1" height="15.0" fill="rgb(210,88,3)" rx="2" ry="2" />
+<text  x="1115.68" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="1144.1" y="165" width="0.1" height="15.0" fill="rgb(235,18,19)" rx="2" ry="2" />
+<text  x="1147.10" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit30 (1 ms, 0.04%)</title><rect x="519.3" y="149" width="0.4" height="15.0" fill="rgb(251,182,24)" rx="2" ry="2" />
+<text  x="522.28" y="159.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (2 ms, 0.07%)</title><rect x="490.8" y="101" width="1.0" height="15.0" fill="rgb(213,169,2)" rx="2" ry="2" />
+<text  x="493.78" y="111.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (3 ms, 0.11%)</title><rect x="330.4" y="149" width="1.5" height="15.0" fill="rgb(209,65,6)" rx="2" ry="2" />
+<text  x="333.39" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.results_iter`hit10 (35 ms, 1.25%)</title><rect x="879.3" y="213" width="14.6" height="15.0" fill="rgb(218,83,18)" rx="2" ry="2" />
+<text  x="882.27" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.as_sql`hit10 (180 ms, 6.45%)</title><rect x="422.0" y="181" width="75.9" height="15.0" fill="rgb(207,31,11)" rx="2" ry="2" />
+<text  x="424.99" y="191.5" >compiler..</text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="762.3" y="149" width="0.2" height="15.0" fill="rgb(208,211,16)" rx="2" ry="2" />
+<text  x="765.30" y="159.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (0 ms, 0.00%)</title><rect x="119.6" y="149" width="0.2" height="15.0" fill="rgb(221,6,47)" rx="2" ry="2" />
+<text  x="122.64" y="159.5" ></text>
+</g>
+<g >
+<title>query.unref_alias`hit10 (0 ms, 0.00%)</title><rect x="144.6" y="149" width="0.2" height="15.0" fill="rgb(218,96,49)" rx="2" ry="2" />
+<text  x="147.63" y="159.5" ></text>
+</g>
+<g >
+<title>query.add_votes`hit10 (0 ms, 0.00%)</title><rect x="543.5" y="181" width="0.2" height="15.0" fill="rgb(249,173,50)" rx="2" ry="2" />
+<text  x="546.51" y="191.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (0 ms, 0.00%)</title><rect x="1106.5" y="149" width="0.2" height="15.0" fill="rgb(207,159,18)" rx="2" ry="2" />
+<text  x="1109.54" y="159.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (11 ms, 0.39%)</title><rect x="1101.9" y="197" width="4.8" height="15.0" fill="rgb(221,129,36)" rx="2" ry="2" />
+<text  x="1104.94" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit80 (3 ms, 0.11%)</title><rect x="299.5" y="101" width="1.2" height="15.0" fill="rgb(215,56,0)" rx="2" ry="2" />
+<text  x="302.50" y="111.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (13 ms, 0.47%)</title><rect x="986.6" y="101" width="5.5" height="15.0" fill="rgb(244,122,32)" rx="2" ry="2" />
+<text  x="989.65" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.deferred_to_columns`hit10 (3 ms, 0.11%)</title><rect x="489.6" y="101" width="1.2" height="15.0" fill="rgb(235,75,48)" rx="2" ry="2" />
+<text  x="492.63" y="111.5" ></text>
+</g>
+<g >
+<title>expressions.__getstate__`hit10 (0 ms, 0.00%)</title><rect x="444.4" y="37" width="0.1" height="15.0" fill="rgb(214,140,15)" rx="2" ry="2" />
+<text  x="447.39" y="47.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit30 (13 ms, 0.47%)</title><rect x="474.5" y="101" width="5.5" height="15.0" fill="rgb(236,87,3)" rx="2" ry="2" />
+<text  x="477.46" y="111.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (9 ms, 0.32%)</title><rect x="820.3" y="85" width="3.6" height="15.0" fill="rgb(205,227,33)" rx="2" ry="2" />
+<text  x="823.33" y="95.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit40 (1 ms, 0.04%)</title><rect x="885.4" y="181" width="0.5" height="15.0" fill="rgb(247,126,50)" rx="2" ry="2" />
+<text  x="888.39" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_related_populators`hit10 (0 ms, 0.00%)</title><rect x="898.1" y="213" width="0.2" height="15.0" fill="rgb(227,203,3)" rx="2" ry="2" />
+<text  x="901.11" y="223.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="392.7" y="213" width="0.2" height="15.0" fill="rgb(249,20,46)" rx="2" ry="2" />
+<text  x="395.70" y="223.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="766.7" y="133" width="0.2" height="15.0" fill="rgb(217,192,46)" rx="2" ry="2" />
+<text  x="769.74" y="143.5" ></text>
+</g>
+<g >
+<title>query.deferred_to_data`hit10 (0 ms, 0.00%)</title><rect x="490.6" y="85" width="0.2" height="15.0" fill="rgb(207,54,14)" rx="2" ry="2" />
+<text  x="493.64" y="95.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (4 ms, 0.14%)</title><rect x="728.4" y="117" width="1.6" height="15.0" fill="rgb(210,44,5)" rx="2" ry="2" />
+<text  x="731.44" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (92 ms, 3.30%)</title><rect x="953.0" y="133" width="39.1" height="15.0" fill="rgb(235,104,34)" rx="2" ry="2" />
+<text  x="956.00" y="143.5" >com..</text>
+</g>
+<g >
+<title>lookups.get_db_prep_lookup`hit10 (4 ms, 0.14%)</title><rect x="990.4" y="69" width="1.7" height="15.0" fill="rgb(228,42,30)" rx="2" ry="2" />
+<text  x="993.42" y="79.5" ></text>
+</g>
+<g >
+<title>compiler.cursor_iter`hit10 (3 ms, 0.11%)</title><rect x="1070.2" y="181" width="1.4" height="15.0" fill="rgb(234,18,38)" rx="2" ry="2" />
+<text  x="1073.25" y="191.5" ></text>
+</g>
+<g >
+<title>expressions.copy`hit10 (2 ms, 0.07%)</title><rect x="814.7" y="53" width="0.8" height="15.0" fill="rgb(243,201,22)" rx="2" ry="2" />
+<text  x="817.74" y="63.5" ></text>
+</g>
+<g >
+<title>query.get`hit10 (489 ms, 17.52%)</title><rect x="384.8" y="261" width="206.6" height="15.0" fill="rgb(211,28,7)" rx="2" ry="2" />
+<text  x="387.76" y="271.5" >query.get`hit10</text>
+</g>
+<g >
+<title>datastructures.as_sql`hit10 (2 ms, 0.07%)</title><rect x="450.4" y="133" width="0.8" height="15.0" fill="rgb(215,11,30)" rx="2" ry="2" />
+<text  x="453.44" y="143.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (0 ms, 0.00%)</title><rect x="1175.8" y="165" width="0.1" height="15.0" fill="rgb(228,10,28)" rx="2" ry="2" />
+<text  x="1178.77" y="175.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (0 ms, 0.00%)</title><rect x="740.7" y="149" width="0.2" height="15.0" fill="rgb(219,187,33)" rx="2" ry="2" />
+<text  x="743.75" y="159.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (2 ms, 0.07%)</title><rect x="772.0" y="261" width="0.8" height="15.0" fill="rgb(215,103,9)" rx="2" ry="2" />
+<text  x="775.01" y="271.5" ></text>
+</g>
+<g >
+<title>query.add_q`hit10 (109 ms, 3.91%)</title><rect x="537.3" y="213" width="46.2" height="15.0" fill="rgb(252,207,52)" rx="2" ry="2" />
+<text  x="540.27" y="223.5" >quer..</text>
+</g>
+<g >
+<title>base.from_db`hit10 (5 ms, 0.18%)</title><rect x="923.5" y="181" width="2.1" height="15.0" fill="rgb(245,191,16)" rx="2" ry="2" />
+<text  x="926.53" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.get_select`hit10 (147 ms, 5.27%)</title><rect x="267.3" y="149" width="62.2" height="15.0" fill="rgb(218,109,8)" rx="2" ry="2" />
+<text  x="270.31" y="159.5" >compil..</text>
+</g>
+<g >
+<title>compiler.apply_converters`hit10 (16 ms, 0.57%)</title><rect x="405.3" y="197" width="6.6" height="15.0" fill="rgb(246,27,46)" rx="2" ry="2" />
+<text  x="408.29" y="207.5" ></text>
+</g>
+<g >
+<title>query.check_related_objects`hit10 (1 ms, 0.04%)</title><rect x="565.7" y="165" width="0.3" height="15.0" fill="rgb(250,82,36)" rx="2" ry="2" />
+<text  x="568.74" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.apply_converters`hit10 (8 ms, 0.29%)</title><rect x="922.0" y="197" width="3.6" height="15.0" fill="rgb(206,177,6)" rx="2" ry="2" />
+<text  x="924.98" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.get_distinct`hit10 (4 ms, 0.14%)</title><rect x="251.8" y="181" width="1.6" height="15.0" fill="rgb(207,120,42)" rx="2" ry="2" />
+<text  x="254.81" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit60 (2 ms, 0.07%)</title><rect x="1037.1" y="85" width="0.9" height="15.0" fill="rgb(235,97,23)" rx="2" ry="2" />
+<text  x="1040.12" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.get_select`hit10 (91 ms, 3.26%)</title><rect x="457.2" y="133" width="38.6" height="15.0" fill="rgb(210,195,45)" rx="2" ry="2" />
+<text  x="460.19" y="143.5" >com..</text>
+</g>
+<g >
+<title>query.filter`hit10 (148 ms, 5.30%)</title><rect x="521.3" y="245" width="62.8" height="15.0" fill="rgb(220,204,20)" rx="2" ry="2" />
+<text  x="524.30" y="255.5" >query...</text>
+</g>
+<g >
+<title>query.get_compiler`hit10 (3 ms, 0.11%)</title><rect x="519.7" y="197" width="1.3" height="15.0" fill="rgb(247,48,34)" rx="2" ry="2" />
+<text  x="522.71" y="207.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="253.3" y="165" width="0.1" height="15.0" fill="rgb(205,46,6)" rx="2" ry="2" />
+<text  x="256.26" y="175.5" ></text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="896.1" y="197" width="0.4" height="15.0" fill="rgb(229,117,36)" rx="2" ry="2" />
+<text  x="899.05" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.get_default_columns`hit10 (55 ms, 1.97%)</title><rect x="300.7" y="133" width="23.2" height="15.0" fill="rgb(206,52,11)" rx="2" ry="2" />
+<text  x="303.70" y="143.5" >c..</text>
+</g>
+<g >
+<title>related.get_col`hit10 (6 ms, 0.22%)</title><rect x="711.4" y="149" width="2.7" height="15.0" fill="rgb(230,48,26)" rx="2" ry="2" />
+<text  x="714.41" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.setup_query`hit10 (150 ms, 5.38%)</title><rect x="266.0" y="165" width="63.5" height="15.0" fill="rgb(243,8,6)" rx="2" ry="2" />
+<text  x="268.97" y="175.5" >compil..</text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit30 (1 ms, 0.04%)</title><rect x="509.8" y="165" width="0.4" height="15.0" fill="rgb(227,5,13)" rx="2" ry="2" />
+<text  x="512.78" y="175.5" ></text>
+</g>
+<g >
+<title>base.__init__`hit10 (0 ms, 0.00%)</title><rect x="925.4" y="165" width="0.2" height="15.0" fill="rgb(241,137,45)" rx="2" ry="2" />
+<text  x="928.37" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="964.0" y="69" width="0.1" height="15.0" fill="rgb(216,193,22)" rx="2" ry="2" />
+<text  x="967.00" y="79.5" ></text>
+</g>
+<g >
+<title>query.add_ordering`hit10 (0 ms, 0.00%)</title><rect x="1175.9" y="229" width="0.2" height="15.0" fill="rgb(235,192,19)" rx="2" ry="2" />
+<text  x="1178.94" y="239.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (5 ms, 0.18%)</title><rect x="445.4" y="85" width="2.3" height="15.0" fill="rgb(230,209,41)" rx="2" ry="2" />
+<text  x="448.45" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.get_converters`hit10 (44 ms, 1.58%)</title><rect x="1074.5" y="181" width="18.8" height="15.0" fill="rgb(214,172,6)" rx="2" ry="2" />
+<text  x="1077.51" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.as_sql`hit10 (310 ms, 11.11%)</title><rect x="939.1" y="181" width="131.1" height="15.0" fill="rgb(217,24,21)" rx="2" ry="2" />
+<text  x="942.10" y="191.5" >compiler.as_sql`..</text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (0 ms, 0.00%)</title><rect x="772.6" y="245" width="0.2" height="15.0" fill="rgb(231,125,20)" rx="2" ry="2" />
+<text  x="775.62" y="255.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (1 ms, 0.04%)</title><rect x="142.4" y="133" width="0.3" height="15.0" fill="rgb(237,31,18)" rx="2" ry="2" />
+<text  x="145.42" y="143.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="1152.6" y="133" width="0.1" height="15.0" fill="rgb(221,139,49)" rx="2" ry="2" />
+<text  x="1155.58" y="143.5" ></text>
+</g>
+<g >
+<title>manager.get_queryset`hit20 (19 ms, 0.68%)</title><rect x="663.8" y="245" width="7.8" height="15.0" fill="rgb(230,25,51)" rx="2" ry="2" />
+<text  x="666.77" y="255.5" ></text>
+</g>
+<g >
+<title>4510-Thread-5 (1,386 ms, 49.67%)</title><rect x="10.0" y="293" width="585.9" height="15.0" fill="rgb(254,153,27)" rx="2" ry="2" />
+<text  x="13.00" y="303.5" >4510-Thread-5</text>
+</g>
+<g >
+<title>query.unref_alias`hit10 (0 ms, 0.00%)</title><rect x="499.5" y="165" width="0.1" height="15.0" fill="rgb(212,167,47)" rx="2" ry="2" />
+<text  x="502.47" y="175.5" ></text>
+</g>
+<g >
+<title>query.build_filter`hit10 (173 ms, 6.20%)</title><rect x="696.8" y="181" width="73.0" height="15.0" fill="rgb(205,17,0)" rx="2" ry="2" />
+<text  x="699.76" y="191.5" >query.bu..</text>
+</g>
+<g >
+<title>query.get`hit10 (640 ms, 22.93%)</title><rect x="905.6" y="261" width="270.8" height="15.0" fill="rgb(219,10,7)" rx="2" ry="2" />
+<text  x="908.59" y="271.5" >query.get`hit10</text>
+</g>
+<g >
+<title>expressions.get_lookup`hit10 (8 ms, 0.29%)</title><rect x="558.2" y="149" width="3.5" height="15.0" fill="rgb(234,114,25)" rx="2" ry="2" />
+<text  x="561.18" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.get_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="242.8" y="53" width="0.1" height="15.0" fill="rgb(212,38,53)" rx="2" ry="2" />
+<text  x="245.76" y="63.5" ></text>
+</g>
+<g >
+<title>query.clear_ordering`hit10 (0 ms, 0.00%)</title><rect x="591.1" y="229" width="0.1" height="15.0" fill="rgb(245,81,38)" rx="2" ry="2" />
+<text  x="594.09" y="239.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (1 ms, 0.04%)</title><rect x="569.7" y="149" width="0.2" height="15.0" fill="rgb(236,137,47)" rx="2" ry="2" />
+<text  x="572.71" y="159.5" ></text>
+</g>
+<g >
+<title>query._filter_or_exclude`hit10 (142 ms, 5.09%)</title><rect x="523.9" y="229" width="59.9" height="15.0" fill="rgb(222,19,54)" rx="2" ry="2" />
+<text  x="526.94" y="239.5" >query...</text>
+</g>
+<g >
+<title>related.get_joining_columns`hit10 (0 ms, 0.00%)</title><rect x="129.1" y="133" width="0.2" height="15.0" fill="rgb(217,2,23)" rx="2" ry="2" />
+<text  x="132.12" y="143.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit10 (0 ms, 0.00%)</title><rect x="451.1" y="117" width="0.1" height="15.0" fill="rgb(220,45,15)" rx="2" ry="2" />
+<text  x="454.06" y="127.5" ></text>
+</g>
+<g >
+<title>query.update_join_types`hit10 (4 ms, 0.14%)</title><rect x="1157.2" y="181" width="1.9" height="15.0" fill="rgb(254,203,37)" rx="2" ry="2" />
+<text  x="1160.24" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (51 ms, 1.83%)</title><rect x="426.2" y="133" width="21.5" height="15.0" fill="rgb(226,187,22)" rx="2" ry="2" />
+<text  x="429.20" y="143.5" >c..</text>
+</g>
+<g >
+<title>query_utils.__init__`hit10 (0 ms, 0.00%)</title><rect x="1159.3" y="213" width="0.1" height="15.0" fill="rgb(228,40,33)" rx="2" ry="2" />
+<text  x="1162.29" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.setup_query`hit10 (102 ms, 3.66%)</title><rect x="831.8" y="165" width="43.0" height="15.0" fill="rgb(243,18,40)" rx="2" ry="2" />
+<text  x="834.83" y="175.5" >comp..</text>
+</g>
+<g >
+<title>lookups.get_rhs_op`hit10 (0 ms, 0.00%)</title><rect x="429.9" y="101" width="0.2" height="15.0" fill="rgb(215,48,37)" rx="2" ry="2" />
+<text  x="432.94" y="111.5" ></text>
+</g>
+<g >
+<title>query._add_q`hit10 (188 ms, 6.74%)</title><rect x="692.0" y="197" width="79.6" height="15.0" fill="rgb(215,166,54)" rx="2" ry="2" />
+<text  x="695.03" y="207.5" >query._ad..</text>
+</g>
+<g >
+<title>where.as_sql`hit10 (52 ms, 1.86%)</title><rect x="425.6" y="149" width="22.1" height="15.0" fill="rgb(217,34,11)" rx="2" ry="2" />
+<text  x="428.58" y="159.5" >w..</text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="565.1" y="101" width="0.2" height="15.0" fill="rgb(225,134,25)" rx="2" ry="2" />
+<text  x="568.07" y="111.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="265.8" y="149" width="0.2" height="15.0" fill="rgb(218,148,47)" rx="2" ry="2" />
+<text  x="268.83" y="159.5" ></text>
+</g>
+<g >
+<title>query.chain`hit10 (5 ms, 0.18%)</title><rect x="588.8" y="197" width="2.2" height="15.0" fill="rgb(205,47,32)" rx="2" ry="2" />
+<text  x="591.78" y="207.5" ></text>
+</g>
+<g >
+<title>expressions.get_lookup`hit10 (9 ms, 0.32%)</title><rect x="1132.4" y="149" width="4.0" height="15.0" fill="rgb(242,206,30)" rx="2" ry="2" />
+<text  x="1135.42" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.get_prep_lookup`hit10 (11 ms, 0.39%)</title><rect x="101.0" y="117" width="4.7" height="15.0" fill="rgb(222,24,20)" rx="2" ry="2" />
+<text  x="103.98" y="127.5" ></text>
+</g>
+<g >
+<title>query.reset_refcounts`hit10 (2 ms, 0.07%)</title><rect x="498.6" y="181" width="1.0" height="15.0" fill="rgb(252,164,37)" rx="2" ry="2" />
+<text  x="501.62" y="191.5" ></text>
+</g>
+<g >
+<title>__init__.db_type`hit10 (6 ms, 0.22%)</title><rect x="961.7" y="85" width="2.4" height="15.0" fill="rgb(210,123,30)" rx="2" ry="2" />
+<text  x="964.68" y="95.5" ></text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="363.6" y="197" width="0.4" height="15.0" fill="rgb(205,168,27)" rx="2" ry="2" />
+<text  x="366.55" y="207.5" ></text>
+</g>
+<g >
+<title>query.check_related_objects`hit10 (14 ms, 0.50%)</title><rect x="108.2" y="165" width="6.1" height="15.0" fill="rgb(225,99,28)" rx="2" ry="2" />
+<text  x="111.16" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_select`hit10 (100 ms, 3.58%)</title><rect x="832.5" y="149" width="42.3" height="15.0" fill="rgb(206,149,53)" rx="2" ry="2" />
+<text  x="835.54" y="159.5" >com..</text>
+</g>
+<g >
+<title>query.set_limits`hit10 (0 ms, 0.00%)</title><rect x="1176.2" y="245" width="0.2" height="15.0" fill="rgb(211,226,45)" rx="2" ry="2" />
+<text  x="1179.22" y="255.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="964.1" y="85" width="0.2" height="15.0" fill="rgb(229,73,35)" rx="2" ry="2" />
+<text  x="967.13" y="95.5" ></text>
+</g>
+<g >
+<title>datastructures.as_sql`hit10 (3 ms, 0.11%)</title><rect x="995.0" y="133" width="1.1" height="15.0" fill="rgb(246,200,51)" rx="2" ry="2" />
+<text  x="998.05" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (6 ms, 0.22%)</title><rect x="867.4" y="101" width="2.6" height="15.0" fill="rgb(213,210,27)" rx="2" ry="2" />
+<text  x="870.39" y="111.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_prep_value`hit10 (0 ms, 0.00%)</title><rect x="447.6" y="53" width="0.1" height="15.0" fill="rgb(212,5,24)" rx="2" ry="2" />
+<text  x="450.56" y="63.5" ></text>
+</g>
+<g >
+<title>related.db_type`hit10 (12 ms, 0.43%)</title><rect x="243.0" y="85" width="5.2" height="15.0" fill="rgb(222,116,50)" rx="2" ry="2" />
+<text  x="246.04" y="95.5" ></text>
+</g>
+<g >
+<title>where.split_having`hit10 (7 ms, 0.25%)</title><rect x="1067.2" y="149" width="3.0" height="15.0" fill="rgb(226,15,41)" rx="2" ry="2" />
+<text  x="1070.17" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.get_rhs_op`hit10 (0 ms, 0.00%)</title><rect x="807.3" y="101" width="0.1" height="15.0" fill="rgb(226,221,48)" rx="2" ry="2" />
+<text  x="810.30" y="111.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_prep_value`hit10 (0 ms, 0.00%)</title><rect x="251.7" y="53" width="0.1" height="15.0" fill="rgb(230,8,9)" rx="2" ry="2" />
+<text  x="254.67" y="63.5" ></text>
+</g>
+<g >
+<title>compiler.get_default_columns`hit10 (41 ms, 1.47%)</title><rect x="852.5" y="133" width="17.5" height="15.0" fill="rgb(234,202,27)" rx="2" ry="2" />
+<text  x="855.49" y="143.5" ></text>
+</g>
+<g >
+<title>datastructures.equals`hit10 (0 ms, 0.00%)</title><rect x="754.5" y="117" width="0.1" height="15.0" fill="rgb(227,20,36)" rx="2" ry="2" />
+<text  x="757.48" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit80 (3 ms, 0.11%)</title><rect x="851.3" y="101" width="1.2" height="15.0" fill="rgb(206,150,23)" rx="2" ry="2" />
+<text  x="854.32" y="111.5" ></text>
+</g>
+<g >
+<title>related.get_joining_columns`hit10 (0 ms, 0.00%)</title><rect x="749.2" y="133" width="0.2" height="15.0" fill="rgb(241,14,24)" rx="2" ry="2" />
+<text  x="752.22" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.__hash__`hit10 (0 ms, 0.00%)</title><rect x="663.6" y="245" width="0.2" height="15.0" fill="rgb(230,11,35)" rx="2" ry="2" />
+<text  x="666.62" y="255.5" ></text>
+</g>
+<g >
+<title>query_utils.__init__`hit10 (1 ms, 0.04%)</title><rect x="583.5" y="213" width="0.3" height="15.0" fill="rgb(240,205,0)" rx="2" ry="2" />
+<text  x="586.47" y="223.5" ></text>
+</g>
+<g >
+<title>query._filter_or_exclude`hit10 (145 ms, 5.20%)</title><rect x="1098.1" y="229" width="61.3" height="15.0" fill="rgb(221,184,23)" rx="2" ry="2" />
+<text  x="1101.10" y="239.5" >query...</text>
+</g>
+<g >
+<title>query.clone`hit10 (9 ms, 0.32%)</title><rect x="1172.2" y="181" width="3.7" height="15.0" fill="rgb(235,46,36)" rx="2" ry="2" />
+<text  x="1175.19" y="191.5" ></text>
+</g>
+<g >
+<title>query.resolve_lookup_value`hit10 (1 ms, 0.04%)</title><rect x="572.2" y="165" width="0.3" height="15.0" fill="rgb(217,208,24)" rx="2" ry="2" />
+<text  x="575.23" y="175.5" ></text>
+</g>
+<g >
+<title>query.__len__`hit10 (553 ms, 19.82%)</title><rect x="150.8" y="261" width="234.0" height="15.0" fill="rgb(208,177,8)" rx="2" ry="2" />
+<text  x="153.81" y="271.5" >query.__len__`hit10</text>
+</g>
+<g >
+<title>expressions.copy`hit10 (4 ms, 0.14%)</title><rect x="984.8" y="53" width="1.5" height="15.0" fill="rgb(208,175,52)" rx="2" ry="2" />
+<text  x="987.81" y="63.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (35 ms, 1.25%)</title><rect x="430.1" y="101" width="14.7" height="15.0" fill="rgb(232,12,54)" rx="2" ry="2" />
+<text  x="433.08" y="111.5" ></text>
+</g>
+<g >
+<title>lookups.__init__`hit10 (7 ms, 0.25%)</title><rect x="1136.4" y="149" width="2.9" height="15.0" fill="rgb(226,112,2)" rx="2" ry="2" />
+<text  x="1139.36" y="159.5" ></text>
+</g>
+<g >
+<title>query.check_related_objects`hit10 (5 ms, 0.18%)</title><rect x="735.8" y="165" width="2.1" height="15.0" fill="rgb(227,129,44)" rx="2" ry="2" />
+<text  x="738.77" y="175.5" ></text>
+</g>
+<g >
+<title>query._filter_or_exclude`hit10 (231 ms, 8.28%)</title><rect x="674.1" y="229" width="97.8" height="15.0" fill="rgb(240,45,29)" rx="2" ry="2" />
+<text  x="677.12" y="239.5" >query._filt..</text>
+</g>
+<g >
+<title>compiler.get_from_clause`hit10 (8 ms, 0.29%)</title><rect x="992.8" y="165" width="3.3" height="15.0" fill="rgb(244,118,6)" rx="2" ry="2" />
+<text  x="995.84" y="175.5" ></text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="904.7" y="181" width="0.4" height="15.0" fill="rgb(229,103,35)" rx="2" ry="2" />
+<text  x="907.72" y="191.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit30 (9 ms, 0.32%)</title><rect x="860.0" y="117" width="4.0" height="15.0" fill="rgb(229,207,10)" rx="2" ry="2" />
+<text  x="862.99" y="127.5" ></text>
+</g>
+<g >
+<title>where.split_having`hit10 (5 ms, 0.18%)</title><rect x="495.8" y="149" width="2.1" height="15.0" fill="rgb(225,54,10)" rx="2" ry="2" />
+<text  x="498.78" y="159.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (15 ms, 0.54%)</title><rect x="1100.5" y="213" width="6.2" height="15.0" fill="rgb(209,111,10)" rx="2" ry="2" />
+<text  x="1103.46" y="223.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (14 ms, 0.50%)</title><rect x="566.0" y="165" width="6.0" height="15.0" fill="rgb(251,188,0)" rx="2" ry="2" />
+<text  x="568.99" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (0 ms, 0.00%)</title><rect x="868.9" y="85" width="0.2" height="15.0" fill="rgb(238,72,30)" rx="2" ry="2" />
+<text  x="871.94" y="95.5" ></text>
+</g>
+<g >
+<title>query._add_q`hit10 (119 ms, 4.26%)</title><rect x="1108.6" y="197" width="50.5" height="15.0" fill="rgb(216,113,52)" rx="2" ry="2" />
+<text  x="1111.64" y="207.5" >query..</text>
+</g>
+<g >
+<title>query.table_alias`hit10 (0 ms, 0.00%)</title><rect x="1144.0" y="133" width="0.1" height="15.0" fill="rgb(205,145,10)" rx="2" ry="2" />
+<text  x="1146.96" y="143.5" ></text>
+</g>
+<g >
+<title>query_utils.get_lookup`hit10 (6 ms, 0.22%)</title><rect x="559.1" y="133" width="2.6" height="15.0" fill="rgb(227,194,21)" rx="2" ry="2" />
+<text  x="562.14" y="143.5" ></text>
+</g>
+<g >
+<title>query.unref_alias`hit10 (0 ms, 0.00%)</title><rect x="769.7" y="149" width="0.1" height="15.0" fill="rgb(206,177,34)" rx="2" ry="2" />
+<text  x="772.66" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.__init__`hit10 (8 ms, 0.29%)</title><rect x="561.7" y="149" width="3.6" height="15.0" fill="rgb(220,145,47)" rx="2" ry="2" />
+<text  x="564.73" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (67 ms, 2.40%)</title><rect x="958.3" y="101" width="28.3" height="15.0" fill="rgb(253,158,10)" rx="2" ry="2" />
+<text  x="961.33" y="111.5" >l..</text>
+</g>
+<g >
+<title>lookups.__init__`hit10 (31 ms, 1.11%)</title><rect x="722.4" y="149" width="13.1" height="15.0" fill="rgb(251,43,29)" rx="2" ry="2" />
+<text  x="725.43" y="159.5" ></text>
+</g>
+<g >
+<title>manager.__new__`hit20 (1 ms, 0.04%)</title><rect x="1189.7" y="245" width="0.3" height="15.0" fill="rgb(206,177,30)" rx="2" ry="2" />
+<text  x="1192.66" y="255.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit30 (7 ms, 0.25%)</title><rect x="486.8" y="101" width="2.8" height="15.0" fill="rgb(231,46,45)" rx="2" ry="2" />
+<text  x="489.79" y="111.5" ></text>
+</g>
+<g >
+<title>query_utils.get_lookup`hit10 (3 ms, 0.11%)</title><rect x="92.4" y="133" width="1.1" height="15.0" fill="rgb(229,115,1)" rx="2" ry="2" />
+<text  x="95.38" y="143.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (0 ms, 0.00%)</title><rect x="876.2" y="133" width="0.2" height="15.0" fill="rgb(249,34,44)" rx="2" ry="2" />
+<text  x="879.23" y="143.5" ></text>
+</g>
+<g >
+<title>related.get_prep_value`hit10 (9 ms, 0.32%)</title><rect x="101.7" y="101" width="4.0" height="15.0" fill="rgb(237,212,24)" rx="2" ry="2" />
+<text  x="104.74" y="111.5" ></text>
+</g>
+<g >
+<title>query.clone`hit10 (3 ms, 0.11%)</title><rect x="535.9" y="165" width="1.4" height="15.0" fill="rgb(205,124,17)" rx="2" ry="2" />
+<text  x="538.94" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.set_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="815.6" y="53" width="0.2" height="15.0" fill="rgb(211,100,20)" rx="2" ry="2" />
+<text  x="818.64" y="63.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (10 ms, 0.36%)</title><rect x="319.8" y="101" width="4.1" height="15.0" fill="rgb(246,14,53)" rx="2" ry="2" />
+<text  x="322.81" y="111.5" ></text>
+</g>
+<g >
+<title>query._add_q`hit10 (194 ms, 6.95%)</title><rect x="65.7" y="197" width="82.0" height="15.0" fill="rgb(211,90,47)" rx="2" ry="2" />
+<text  x="68.66" y="207.5" >query._ad..</text>
+</g>
+<g >
+<title>query.ref_alias`hit10 (0 ms, 0.00%)</title><rect x="318.2" y="101" width="0.1" height="15.0" fill="rgb(209,19,54)" rx="2" ry="2" />
+<text  x="321.16" y="111.5" ></text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (0 ms, 0.00%)</title><rect x="150.7" y="245" width="0.1" height="15.0" fill="rgb(205,118,13)" rx="2" ry="2" />
+<text  x="153.67" y="255.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (12 ms, 0.43%)</title><rect x="749.7" y="149" width="5.1" height="15.0" fill="rgb(253,187,15)" rx="2" ry="2" />
+<text  x="752.71" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.get_db_prep_lookup`hit10 (3 ms, 0.11%)</title><rect x="250.7" y="69" width="1.1" height="15.0" fill="rgb(231,222,3)" rx="2" ry="2" />
+<text  x="253.68" y="79.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (8 ms, 0.29%)</title><rect x="587.4" y="213" width="3.6" height="15.0" fill="rgb(249,57,32)" rx="2" ry="2" />
+<text  x="590.42" y="223.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (53 ms, 1.90%)</title><rect x="964.3" y="85" width="22.3" height="15.0" fill="rgb(236,17,23)" rx="2" ry="2" />
+<text  x="967.27" y="95.5" >l..</text>
+</g>
+<g >
+<title>query.join_parent_model`hit40 (1 ms, 0.04%)</title><rect x="866.1" y="117" width="0.6" height="15.0" fill="rgb(215,0,14)" rx="2" ry="2" />
+<text  x="869.12" y="127.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (0 ms, 0.00%)</title><rect x="1130.4" y="133" width="0.1" height="15.0" fill="rgb(249,83,52)" rx="2" ry="2" />
+<text  x="1133.36" y="143.5" ></text>
+</g>
+<g >
+<title>query_utils.__get__`hit30 (1 ms, 0.04%)</title><rect x="365.6" y="213" width="0.5" height="15.0" fill="rgb(248,169,36)" rx="2" ry="2" />
+<text  x="368.65" y="223.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (16 ms, 0.57%)</title><rect x="898.7" y="213" width="6.9" height="15.0" fill="rgb(212,137,1)" rx="2" ry="2" />
+<text  x="901.66" y="223.5" ></text>
+</g>
+<g >
+<title>query.update_join_types`hit10 (4 ms, 0.14%)</title><rect x="769.8" y="181" width="1.8" height="15.0" fill="rgb(252,27,12)" rx="2" ry="2" />
+<text  x="772.82" y="191.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="863.5" y="101" width="0.5" height="15.0" fill="rgb(213,38,23)" rx="2" ry="2" />
+<text  x="866.53" y="111.5" ></text>
+</g>
+<g >
+<title>datastructures.equals`hit10 (0 ms, 0.00%)</title><rect x="133.4" y="117" width="0.2" height="15.0" fill="rgb(217,101,46)" rx="2" ry="2" />
+<text  x="136.42" y="127.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="1154.6" y="149" width="0.1" height="15.0" fill="rgb(223,48,2)" rx="2" ry="2" />
+<text  x="1157.57" y="159.5" ></text>
+</g>
+<g >
+<title>mixins.set_cached_value`hit30 (15 ms, 0.54%)</title><rect x="378.1" y="197" width="6.2" height="15.0" fill="rgb(215,138,33)" rx="2" ry="2" />
+<text  x="381.09" y="207.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="139.3" y="149" width="0.2" height="15.0" fill="rgb(248,100,50)" rx="2" ry="2" />
+<text  x="142.32" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.rel_db_type`hit10 (10 ms, 0.36%)</title><rect x="243.9" y="69" width="4.3" height="15.0" fill="rgb(249,0,26)" rx="2" ry="2" />
+<text  x="246.91" y="79.5" ></text>
+</g>
+<g >
+<title>related.get_col`hit10 (8 ms, 0.29%)</title><rect x="866.7" y="117" width="3.3" height="15.0" fill="rgb(250,101,49)" rx="2" ry="2" />
+<text  x="869.70" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit40 (35 ms, 1.25%)</title><rect x="285.8" y="117" width="14.9" height="15.0" fill="rgb(208,32,28)" rx="2" ry="2" />
+<text  x="288.82" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.get_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="986.3" y="53" width="0.2" height="15.0" fill="rgb(223,50,0)" rx="2" ry="2" />
+<text  x="989.31" y="63.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (1 ms, 0.04%)</title><rect x="1070.0" y="117" width="0.2" height="15.0" fill="rgb(220,152,7)" rx="2" ry="2" />
+<text  x="1072.99" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (7 ms, 0.25%)</title><rect x="810.2" y="69" width="3.1" height="15.0" fill="rgb(252,116,37)" rx="2" ry="2" />
+<text  x="813.22" y="79.5" ></text>
+</g>
+<g >
+<title>query.__len__`hit10 (314 ms, 11.25%)</title><rect x="388.5" y="245" width="132.7" height="15.0" fill="rgb(206,57,10)" rx="2" ry="2" />
+<text  x="391.52" y="255.5" >query.__len__`hi..</text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (550 ms, 19.71%)</title><rect x="152.2" y="245" width="232.6" height="15.0" fill="rgb(235,152,21)" rx="2" ry="2" />
+<text  x="155.16" y="255.5" >query._fetch_all`hit10</text>
+</g>
+<g >
+<title>compiler.cursor_iter`hit10 (7 ms, 0.25%)</title><rect x="331.9" y="197" width="3.0" height="15.0" fill="rgb(214,183,5)" rx="2" ry="2" />
+<text  x="334.86" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.execute_sql`hit10 (208 ms, 7.45%)</title><rect x="411.9" y="197" width="87.7" height="15.0" fill="rgb(215,118,49)" rx="2" ry="2" />
+<text  x="414.86" y="207.5" >compiler.e..</text>
+</g>
+<g >
+<title>__init__.db_type_parameters`hit10 (0 ms, 0.00%)</title><rect x="819.4" y="37" width="0.2" height="15.0" fill="rgb(252,119,48)" rx="2" ry="2" />
+<text  x="822.41" y="47.5" ></text>
+</g>
+<g >
+<title>query_utils.check_rel_lookup_compatibility`hit10 (0 ms, 0.00%)</title><rect x="737.8" y="133" width="0.1" height="15.0" fill="rgb(205,229,6)" rx="2" ry="2" />
+<text  x="740.80" y="143.5" ></text>
+</g>
+<g >
+<title>expressions.select_format`hit30 (8 ms, 0.29%)</title><rect x="492.4" y="117" width="3.4" height="15.0" fill="rgb(228,128,51)" rx="2" ry="2" />
+<text  x="495.43" y="127.5" ></text>
+</g>
+<g >
+<title>query.ref_alias`hit10 (0 ms, 0.00%)</title><rect x="1061.6" y="85" width="0.1" height="15.0" fill="rgb(217,192,24)" rx="2" ry="2" />
+<text  x="1064.55" y="95.5" ></text>
+</g>
+<g >
+<title>query.check_filterable`hit20 (1 ms, 0.04%)</title><rect x="107.9" y="165" width="0.3" height="15.0" fill="rgb(247,42,20)" rx="2" ry="2" />
+<text  x="110.85" y="175.5" ></text>
+</g>
+<g >
+<title>query.unref_alias`hit10 (0 ms, 0.00%)</title><rect x="1073.2" y="165" width="0.1" height="15.0" fill="rgb(216,175,46)" rx="2" ry="2" />
+<text  x="1076.17" y="175.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="759.5" y="133" width="0.2" height="15.0" fill="rgb(210,95,43)" rx="2" ry="2" />
+<text  x="762.49" y="143.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit10 (4 ms, 0.14%)</title><rect x="437.5" y="53" width="1.7" height="15.0" fill="rgb(225,185,3)" rx="2" ry="2" />
+<text  x="440.55" y="63.5" ></text>
+</g>
+<g >
+<title>compiler.get_group_by`hit10 (0 ms, 0.00%)</title><rect x="830.8" y="165" width="0.2" height="15.0" fill="rgb(216,140,11)" rx="2" ry="2" />
+<text  x="833.85" y="175.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="1104.0" y="181" width="0.1" height="15.0" fill="rgb(211,135,29)" rx="2" ry="2" />
+<text  x="1106.99" y="191.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (1 ms, 0.04%)</title><rect x="543.2" y="181" width="0.3" height="15.0" fill="rgb(214,164,40)" rx="2" ry="2" />
+<text  x="546.19" y="191.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (0 ms, 0.00%)</title><rect x="590.7" y="165" width="0.3" height="15.0" fill="rgb(251,13,41)" rx="2" ry="2" />
+<text  x="593.74" y="175.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="831.7" y="149" width="0.1" height="15.0" fill="rgb(244,172,32)" rx="2" ry="2" />
+<text  x="834.68" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="100.8" y="101" width="0.2" height="15.0" fill="rgb(226,44,41)" rx="2" ry="2" />
+<text  x="103.84" y="111.5" ></text>
+</g>
+<g >
+<title>query.ref_alias`hit10 (0 ms, 0.00%)</title><rect x="491.7" y="85" width="0.1" height="15.0" fill="rgb(252,127,41)" rx="2" ry="2" />
+<text  x="494.69" y="95.5" ></text>
+</g>
+<g >
+<title>lookups.get_prep_lookup`hit10 (5 ms, 0.18%)</title><rect x="1137.4" y="133" width="1.9" height="15.0" fill="rgb(243,37,49)" rx="2" ry="2" />
+<text  x="1140.37" y="143.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (12 ms, 0.43%)</title><rect x="57.8" y="197" width="5.2" height="15.0" fill="rgb(205,85,22)" rx="2" ry="2" />
+<text  x="60.75" y="207.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (1 ms, 0.04%)</title><rect x="72.9" y="181" width="0.2" height="15.0" fill="rgb(233,75,31)" rx="2" ry="2" />
+<text  x="75.87" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (84 ms, 3.01%)</title><rect x="216.4" y="149" width="35.4" height="15.0" fill="rgb(251,166,6)" rx="2" ry="2" />
+<text  x="219.37" y="159.5" >com..</text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit10 (0 ms, 0.00%)</title><rect x="359.6" y="149" width="0.1" height="15.0" fill="rgb(249,181,12)" rx="2" ry="2" />
+<text  x="362.57" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.get_group_by`hit10 (0 ms, 0.00%)</title><rect x="455.8" y="149" width="0.1" height="15.0" fill="rgb(242,160,48)" rx="2" ry="2" />
+<text  x="458.76" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.db_type_parameters`hit10 (0 ms, 0.00%)</title><rect x="963.8" y="69" width="0.2" height="15.0" fill="rgb(226,166,53)" rx="2" ry="2" />
+<text  x="966.82" y="79.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (3 ms, 0.11%)</title><rect x="496.7" y="133" width="1.2" height="15.0" fill="rgb(213,80,18)" rx="2" ry="2" />
+<text  x="499.73" y="143.5" ></text>
+</g>
+<g >
+<title>query.solve_lookup_type`hit10 (16 ms, 0.57%)</title><rect x="574.2" y="165" width="6.8" height="15.0" fill="rgb(224,161,42)" rx="2" ry="2" />
+<text  x="577.22" y="175.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__get__`hit10 (11 ms, 0.39%)</title><rect x="591.4" y="261" width="4.5" height="15.0" fill="rgb(213,180,42)" rx="2" ry="2" />
+<text  x="594.38" y="271.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="819.6" y="37" width="0.1" height="15.0" fill="rgb(227,180,45)" rx="2" ry="2" />
+<text  x="822.57" y="47.5" ></text>
+</g>
+<g >
+<title>manager.get_queryset`hit20 (18 ms, 0.65%)</title><rect x="37.7" y="245" width="7.8" height="15.0" fill="rgb(233,140,32)" rx="2" ry="2" />
+<text  x="40.66" y="255.5" ></text>
+</g>
+<g >
+<title>where.as_sql`hit10 (86 ms, 3.08%)</title><rect x="215.5" y="165" width="36.3" height="15.0" fill="rgb(207,5,11)" rx="2" ry="2" />
+<text  x="218.49" y="175.5" >whe..</text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (4 ms, 0.14%)</title><rect x="87.0" y="133" width="1.5" height="15.0" fill="rgb(242,9,23)" rx="2" ry="2" />
+<text  x="90.02" y="143.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (29 ms, 1.04%)</title><rect x="807.4" y="101" width="12.3" height="15.0" fill="rgb(220,123,20)" rx="2" ry="2" />
+<text  x="810.44" y="111.5" ></text>
+</g>
+<g >
+<title>query.clone`hit10 (3 ms, 0.11%)</title><rect x="1105.5" y="165" width="1.2" height="15.0" fill="rgb(243,142,54)" rx="2" ry="2" />
+<text  x="1108.54" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_extra_select`hit10 (0 ms, 0.00%)</title><rect x="264.2" y="165" width="0.1" height="15.0" fill="rgb(248,58,11)" rx="2" ry="2" />
+<text  x="267.15" y="175.5" ></text>
+</g>
+<g >
+<title>query.__len__`hit10 (314 ms, 11.25%)</title><rect x="772.8" y="261" width="132.8" height="15.0" fill="rgb(224,129,19)" rx="2" ry="2" />
+<text  x="775.77" y="271.5" >query.__len__`hi..</text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="796.8" y="149" width="0.4" height="15.0" fill="rgb(229,54,27)" rx="2" ry="2" />
+<text  x="799.83" y="159.5" ></text>
+</g>
+<g >
+<title>query.add_votes`hit10 (0 ms, 0.00%)</title><rect x="73.1" y="181" width="0.2" height="15.0" fill="rgb(216,73,43)" rx="2" ry="2" />
+<text  x="76.10" y="191.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit40 (1 ms, 0.04%)</title><rect x="346.5" y="181" width="0.6" height="15.0" fill="rgb(251,229,51)" rx="2" ry="2" />
+<text  x="349.52" y="191.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (22 ms, 0.79%)</title><rect x="435.5" y="85" width="9.3" height="15.0" fill="rgb(244,19,0)" rx="2" ry="2" />
+<text  x="438.53" y="95.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="774.7" y="229" width="0.1" height="15.0" fill="rgb(251,145,46)" rx="2" ry="2" />
+<text  x="777.68" y="239.5" ></text>
+</g>
+<g >
+<title>compiler.get_order_by`hit10 (2 ms, 0.07%)</title><rect x="831.0" y="165" width="0.8" height="15.0" fill="rgb(208,36,22)" rx="2" ry="2" />
+<text  x="833.98" y="175.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="825.0" y="165" width="0.1" height="15.0" fill="rgb(215,176,11)" rx="2" ry="2" />
+<text  x="827.99" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.get_db_converters`hit40 (19 ms, 0.68%)</title><rect x="885.9" y="181" width="8.0" height="15.0" fill="rgb(235,142,8)" rx="2" ry="2" />
+<text  x="888.93" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (5 ms, 0.18%)</title><rect x="449.3" y="149" width="1.9" height="15.0" fill="rgb(246,46,37)" rx="2" ry="2" />
+<text  x="452.28" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (2 ms, 0.07%)</title><rect x="732.8" y="85" width="0.9" height="15.0" fill="rgb(252,26,47)" rx="2" ry="2" />
+<text  x="735.78" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.deferred_to_columns`hit10 (2 ms, 0.07%)</title><rect x="864.0" y="117" width="0.9" height="15.0" fill="rgb(250,118,53)" rx="2" ry="2" />
+<text  x="866.97" y="127.5" ></text>
+</g>
+<g >
+<title>mixins.is_cached`hit30 (6 ms, 0.22%)</title><rect x="893.9" y="213" width="2.6" height="15.0" fill="rgb(225,8,41)" rx="2" ry="2" />
+<text  x="896.90" y="223.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="729.8" y="101" width="0.2" height="15.0" fill="rgb(222,96,8)" rx="2" ry="2" />
+<text  x="732.82" y="111.5" ></text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="383.9" y="181" width="0.4" height="15.0" fill="rgb(224,164,24)" rx="2" ry="2" />
+<text  x="386.87" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.get_extra_select`hit10 (0 ms, 0.00%)</title><rect x="455.6" y="149" width="0.2" height="15.0" fill="rgb(241,128,23)" rx="2" ry="2" />
+<text  x="458.61" y="159.5" ></text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (310 ms, 11.11%)</title><rect x="390.0" y="229" width="131.2" height="15.0" fill="rgb(232,185,42)" rx="2" ry="2" />
+<text  x="393.00" y="239.5" >query._fetch_all..</text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="136.5" y="133" width="0.1" height="15.0" fill="rgb(205,27,2)" rx="2" ry="2" />
+<text  x="139.46" y="143.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="740.9" y="149" width="0.1" height="15.0" fill="rgb(226,227,26)" rx="2" ry="2" />
+<text  x="743.89" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.pre_sql_setup`hit10 (110 ms, 3.94%)</title><rect x="451.2" y="165" width="46.7" height="15.0" fill="rgb(232,33,13)" rx="2" ry="2" />
+<text  x="454.19" y="175.5" >comp..</text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (12 ms, 0.43%)</title><rect x="737.9" y="165" width="5.2" height="15.0" fill="rgb(206,8,26)" rx="2" ry="2" />
+<text  x="740.94" y="175.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (2 ms, 0.07%)</title><rect x="573.2" y="149" width="1.0" height="15.0" fill="rgb(235,9,41)" rx="2" ry="2" />
+<text  x="576.22" y="159.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit20 (1 ms, 0.04%)</title><rect x="44.9" y="213" width="0.6" height="15.0" fill="rgb(210,98,50)" rx="2" ry="2" />
+<text  x="47.86" y="223.5" ></text>
+</g>
+<g >
+<title>query.build_lookup`hit10 (50 ms, 1.79%)</title><rect x="714.1" y="165" width="21.4" height="15.0" fill="rgb(233,158,47)" rx="2" ry="2" />
+<text  x="717.13" y="175.5" >q..</text>
+</g>
+<g >
+<title>query.chain`hit10 (10 ms, 0.36%)</title><rect x="686.3" y="181" width="4.4" height="15.0" fill="rgb(205,88,25)" rx="2" ry="2" />
+<text  x="689.26" y="191.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (2 ms, 0.07%)</title><rect x="875.4" y="149" width="1.0" height="15.0" fill="rgb(248,72,6)" rx="2" ry="2" />
+<text  x="878.35" y="159.5" ></text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (431 ms, 15.44%)</title><rect x="912.4" y="229" width="182.2" height="15.0" fill="rgb(241,4,38)" rx="2" ry="2" />
+<text  x="915.36" y="239.5" >query._fetch_all`hit10</text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="1159.1" y="197" width="0.2" height="15.0" fill="rgb(220,167,5)" rx="2" ry="2" />
+<text  x="1162.15" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (2 ms, 0.07%)</title><rect x="104.7" y="85" width="1.0" height="15.0" fill="rgb(240,64,5)" rx="2" ry="2" />
+<text  x="107.72" y="95.5" ></text>
+</g>
+<g >
+<title>query.filter`hit10 (242 ms, 8.67%)</title><rect x="45.6" y="245" width="102.5" height="15.0" fill="rgb(249,24,10)" rx="2" ry="2" />
+<text  x="48.62" y="255.5" >query.filter..</text>
+</g>
+<g >
+<title>expressions.get_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="444.5" y="53" width="0.2" height="15.0" fill="rgb(250,224,17)" rx="2" ry="2" />
+<text  x="447.53" y="63.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (10 ms, 0.36%)</title><rect x="1139.7" y="165" width="4.4" height="15.0" fill="rgb(220,37,14)" rx="2" ry="2" />
+<text  x="1142.73" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.__init__`hit10 (0 ms, 0.00%)</title><rect x="323.8" y="69" width="0.1" height="15.0" fill="rgb(234,203,34)" rx="2" ry="2" />
+<text  x="326.80" y="79.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (20 ms, 0.72%)</title><rect x="788.6" y="181" width="8.6" height="15.0" fill="rgb(241,185,43)" rx="2" ry="2" />
+<text  x="791.61" y="191.5" ></text>
+</g>
+<g >
+<title>query.solve_lookup_type`hit10 (15 ms, 0.54%)</title><rect x="136.6" y="165" width="6.3" height="15.0" fill="rgb(226,137,54)" rx="2" ry="2" />
+<text  x="139.63" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.resolve_expression`hit10 (26 ms, 0.93%)</title><rect x="975.8" y="69" width="10.8" height="15.0" fill="rgb(207,87,6)" rx="2" ry="2" />
+<text  x="978.82" y="79.5" ></text>
+</g>
+<g >
+<title>related.get_prep_value`hit10 (4 ms, 0.14%)</title><rect x="731.9" y="101" width="1.8" height="15.0" fill="rgb(240,144,42)" rx="2" ry="2" />
+<text  x="734.90" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.execute_sql`hit10 (319 ms, 11.43%)</title><rect x="203.3" y="213" width="134.8" height="15.0" fill="rgb(215,13,34)" rx="2" ry="2" />
+<text  x="206.34" y="223.5" >compiler.execute_..</text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="1055.4" y="85" width="0.4" height="15.0" fill="rgb(230,178,36)" rx="2" ry="2" />
+<text  x="1058.41" y="95.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (10 ms, 0.36%)</title><rect x="988.0" y="85" width="4.1" height="15.0" fill="rgb(239,93,22)" rx="2" ry="2" />
+<text  x="990.98" y="95.5" ></text>
+</g>
+<g >
+<title>query.promote_joins`hit10 (0 ms, 0.00%)</title><rect x="1159.0" y="165" width="0.1" height="15.0" fill="rgb(225,58,48)" rx="2" ry="2" />
+<text  x="1162.00" y="175.5" ></text>
+</g>
+<g >
+<title>query.deferred_to_data`hit10 (0 ms, 0.00%)</title><rect x="1057.4" y="85" width="0.2" height="15.0" fill="rgb(238,100,43)" rx="2" ry="2" />
+<text  x="1060.43" y="95.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="574.0" y="133" width="0.2" height="15.0" fill="rgb(216,199,24)" rx="2" ry="2" />
+<text  x="577.05" y="143.5" ></text>
+</g>
+<g >
+<title>lookups.as_sql`hit10 (89 ms, 3.19%)</title><rect x="954.3" y="117" width="37.8" height="15.0" fill="rgb(226,160,4)" rx="2" ry="2" />
+<text  x="957.26" y="127.5" >loo..</text>
+</g>
+<g >
+<title>query.get_related_populators`hit10 (0 ms, 0.00%)</title><rect x="1094.5" y="197" width="0.1" height="15.0" fill="rgb(245,20,12)" rx="2" ry="2" />
+<text  x="1097.50" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.get_from_clause`hit10 (10 ms, 0.36%)</title><rect x="253.4" y="181" width="4.3" height="15.0" fill="rgb(220,96,17)" rx="2" ry="2" />
+<text  x="256.40" y="191.5" ></text>
+</g>
+<g >
+<title>query.clone`hit10 (4 ms, 0.14%)</title><rect x="61.3" y="165" width="1.7" height="15.0" fill="rgb(210,83,14)" rx="2" ry="2" />
+<text  x="64.29" y="175.5" ></text>
+</g>
+<g >
+<title>query.add_votes`hit10 (1 ms, 0.04%)</title><rect x="1112.8" y="181" width="0.3" height="15.0" fill="rgb(241,97,26)" rx="2" ry="2" />
+<text  x="1115.84" y="191.5" ></text>
+</g>
+<g >
+<title>query.build_lookup`hit10 (21 ms, 0.75%)</title><rect x="556.3" y="165" width="9.0" height="15.0" fill="rgb(217,101,21)" rx="2" ry="2" />
+<text  x="559.29" y="175.5" ></text>
+</g>
+<g >
+<title>query.solve_lookup_type`hit10 (17 ms, 0.61%)</title><rect x="759.7" y="165" width="7.2" height="15.0" fill="rgb(240,64,50)" rx="2" ry="2" />
+<text  x="762.67" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_converters`hit10 (33 ms, 1.18%)</title><rect x="880.1" y="197" width="13.8" height="15.0" fill="rgb(227,119,45)" rx="2" ry="2" />
+<text  x="883.07" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="1139.2" y="101" width="0.1" height="15.0" fill="rgb(213,203,12)" rx="2" ry="2" />
+<text  x="1142.15" y="111.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (2 ms, 0.07%)</title><rect x="864.9" y="117" width="1.1" height="15.0" fill="rgb(218,92,6)" rx="2" ry="2" />
+<text  x="867.94" y="127.5" ></text>
+</g>
+<g >
+<title>related.get_cache_name`hit30 (1 ms, 0.04%)</title><rect x="202.9" y="149" width="0.4" height="15.0" fill="rgb(242,170,28)" rx="2" ry="2" />
+<text  x="205.93" y="159.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="147.3" y="165" width="0.2" height="15.0" fill="rgb(254,29,1)" rx="2" ry="2" />
+<text  x="150.33" y="175.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (4 ms, 0.14%)</title><rect x="570.1" y="149" width="1.9" height="15.0" fill="rgb(241,52,52)" rx="2" ry="2" />
+<text  x="573.13" y="159.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (6 ms, 0.22%)</title><rect x="148.1" y="261" width="2.7" height="15.0" fill="rgb(250,7,9)" rx="2" ry="2" />
+<text  x="151.10" y="271.5" ></text>
+</g>
+<g >
+<title>query._add_hints`hit10 (0 ms, 0.00%)</title><rect x="45.5" y="245" width="0.1" height="15.0" fill="rgb(230,24,24)" rx="2" ry="2" />
+<text  x="48.46" y="255.5" ></text>
+</g>
+<g >
+<title>query_utils.check_rel_lookup_compatibility`hit10 (0 ms, 0.00%)</title><rect x="114.1" y="133" width="0.2" height="15.0" fill="rgb(247,24,2)" rx="2" ry="2" />
+<text  x="117.11" y="143.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit40 (21 ms, 0.75%)</title><rect x="843.5" y="117" width="9.0" height="15.0" fill="rgb(246,148,5)" rx="2" ry="2" />
+<text  x="846.51" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.deferred_to_columns`hit10 (3 ms, 0.11%)</title><rect x="1056.4" y="101" width="1.2" height="15.0" fill="rgb(241,61,28)" rx="2" ry="2" />
+<text  x="1059.45" y="111.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (1 ms, 0.04%)</title><rect x="576.2" y="149" width="0.2" height="15.0" fill="rgb(254,1,19)" rx="2" ry="2" />
+<text  x="579.21" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="489.2" y="85" width="0.4" height="15.0" fill="rgb(243,2,37)" rx="2" ry="2" />
+<text  x="492.19" y="95.5" ></text>
+</g>
+<g >
+<title>base.from_db`hit30 (56 ms, 2.01%)</title><rect x="179.6" y="213" width="23.7" height="15.0" fill="rgb(207,90,39)" rx="2" ry="2" />
+<text  x="182.61" y="223.5" >b..</text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit10 (0 ms, 0.00%)</title><rect x="257.6" y="133" width="0.1" height="15.0" fill="rgb(217,19,35)" rx="2" ry="2" />
+<text  x="260.60" y="143.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="1170.4" y="197" width="0.2" height="15.0" fill="rgb(206,213,51)" rx="2" ry="2" />
+<text  x="1173.45" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (3 ms, 0.11%)</title><rect x="563.9" y="117" width="1.4" height="15.0" fill="rgb(238,123,22)" rx="2" ry="2" />
+<text  x="566.85" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.__init__`hit2 (2 ms, 0.07%)</title><rect x="1055.8" y="85" width="0.6" height="15.0" fill="rgb(230,9,42)" rx="2" ry="2" />
+<text  x="1058.81" y="95.5" ></text>
+</g>
+<g >
+<title>related_lookups.as_sql`hit10 (76 ms, 2.72%)</title><rect x="219.7" y="133" width="32.1" height="15.0" fill="rgb(219,148,38)" rx="2" ry="2" />
+<text  x="222.72" y="143.5" >re..</text>
+</g>
+<g >
+<title>query.reset_refcounts`hit10 (4 ms, 0.14%)</title><rect x="1071.6" y="181" width="1.7" height="15.0" fill="rgb(251,159,8)" rx="2" ry="2" />
+<text  x="1074.63" y="191.5" ></text>
+</g>
+<g >
+<title>query.clear_ordering`hit10 (0 ms, 0.00%)</title><rect x="1176.1" y="229" width="0.1" height="15.0" fill="rgb(248,84,10)" rx="2" ry="2" />
+<text  x="1179.08" y="239.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (117 ms, 4.19%)</title><rect x="942.6" y="165" width="49.5" height="15.0" fill="rgb(213,87,5)" rx="2" ry="2" />
+<text  x="945.56" y="175.5" >comp..</text>
+</g>
+<g >
+<title>__init__.db_type`hit10 (5 ms, 0.18%)</title><rect x="245.9" y="53" width="2.3" height="15.0" fill="rgb(233,192,5)" rx="2" ry="2" />
+<text  x="248.88" y="63.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="1092.4" y="149" width="0.5" height="15.0" fill="rgb(217,166,3)" rx="2" ry="2" />
+<text  x="1095.44" y="159.5" ></text>
+</g>
+<g >
+<title>datastructures.__eq__`hit10 (3 ms, 0.11%)</title><rect x="753.5" y="133" width="1.1" height="15.0" fill="rgb(205,35,5)" rx="2" ry="2" />
+<text  x="756.48" y="143.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit10 (6 ms, 0.22%)</title><rect x="810.8" y="53" width="2.5" height="15.0" fill="rgb(250,34,36)" rx="2" ry="2" />
+<text  x="813.85" y="63.5" ></text>
+</g>
+<g >
+<title>views.vote`hit10 (1,405 ms, 50.35%)</title><rect x="595.9" y="277" width="594.1" height="15.0" fill="rgb(238,43,52)" rx="2" ry="2" />
+<text  x="598.91" y="287.5" >views.vote`hit10</text>
+</g>
+<g >
+<title>base.__init__`hit10 (0 ms, 0.00%)</title><rect x="411.7" y="165" width="0.2" height="15.0" fill="rgb(208,152,17)" rx="2" ry="2" />
+<text  x="414.66" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.__getstate__`hit10 (0 ms, 0.00%)</title><rect x="986.2" y="37" width="0.1" height="15.0" fill="rgb(216,113,4)" rx="2" ry="2" />
+<text  x="989.17" y="47.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (10 ms, 0.36%)</title><rect x="231.3" y="69" width="4.3" height="15.0" fill="rgb(249,204,28)" rx="2" ry="2" />
+<text  x="234.31" y="79.5" ></text>
+</g>
+<g >
+<title>query.clone`hit10 (8 ms, 0.29%)</title><rect x="687.4" y="165" width="3.3" height="15.0" fill="rgb(238,163,4)" rx="2" ry="2" />
+<text  x="690.45" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.resolve_expression`hit10 (18 ms, 0.65%)</title><rect x="235.6" y="69" width="7.4" height="15.0" fill="rgb(240,93,30)" rx="2" ry="2" />
+<text  x="238.58" y="79.5" ></text>
+</g>
+<g >
+<title>expressions.__init__`hit3 (1 ms, 0.04%)</title><rect x="315.1" y="101" width="0.3" height="15.0" fill="rgb(214,222,10)" rx="2" ry="2" />
+<text  x="318.11" y="111.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="518.9" y="149" width="0.4" height="15.0" fill="rgb(222,10,0)" rx="2" ry="2" />
+<text  x="521.85" y="159.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (11 ms, 0.39%)</title><rect x="576.4" y="149" width="4.6" height="15.0" fill="rgb(211,187,25)" rx="2" ry="2" />
+<text  x="579.44" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.get_default_columns`hit10 (57 ms, 2.04%)</title><rect x="1038.0" y="117" width="24.2" height="15.0" fill="rgb(219,85,5)" rx="2" ry="2" />
+<text  x="1041.00" y="127.5" >c..</text>
+</g>
+<g >
+<title>query.trim_joins`hit10 (0 ms, 0.00%)</title><rect x="581.0" y="165" width="0.2" height="15.0" fill="rgb(239,115,15)" rx="2" ry="2" />
+<text  x="583.96" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (2 ms, 0.07%)</title><rect x="1138.3" y="117" width="1.0" height="15.0" fill="rgb(252,162,32)" rx="2" ry="2" />
+<text  x="1141.35" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (5 ms, 0.18%)</title><rect x="825.7" y="165" width="2.1" height="15.0" fill="rgb(245,192,27)" rx="2" ry="2" />
+<text  x="828.72" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.select_format`hit40 (1 ms, 0.04%)</title><rect x="874.2" y="117" width="0.6" height="15.0" fill="rgb(252,14,14)" rx="2" ry="2" />
+<text  x="877.22" y="127.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit20 (12 ms, 0.43%)</title><rect x="40.3" y="229" width="5.2" height="15.0" fill="rgb(232,7,32)" rx="2" ry="2" />
+<text  x="43.25" y="239.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="318.3" y="117" width="0.1" height="15.0" fill="rgb(220,180,41)" rx="2" ry="2" />
+<text  x="321.31" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit30 (42 ms, 1.51%)</title><rect x="1020.2" y="117" width="17.8" height="15.0" fill="rgb(220,84,28)" rx="2" ry="2" />
+<text  x="1023.20" y="127.5" ></text>
+</g>
+<g >
+<title>query.build_filter`hit10 (169 ms, 6.06%)</title><rect x="73.3" y="181" width="71.5" height="15.0" fill="rgb(206,186,31)" rx="2" ry="2" />
+<text  x="76.31" y="191.5" >query.bu..</text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (33 ms, 1.18%)</title><rect x="229.0" y="85" width="14.0" height="15.0" fill="rgb(241,55,38)" rx="2" ry="2" />
+<text  x="232.01" y="95.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit30 (15 ms, 0.54%)</title><rect x="1050.2" y="101" width="6.2" height="15.0" fill="rgb(208,139,3)" rx="2" ry="2" />
+<text  x="1053.20" y="111.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="866.0" y="117" width="0.1" height="15.0" fill="rgb(236,35,34)" rx="2" ry="2" />
+<text  x="868.98" y="127.5" ></text>
+</g>
+<g >
+<title>query.check_query_object_type`hit10 (3 ms, 0.11%)</title><rect x="736.7" y="149" width="1.2" height="15.0" fill="rgb(210,143,37)" rx="2" ry="2" />
+<text  x="739.70" y="159.5" ></text>
+</g>
+<g >
+<title>query._fetch_all`hit10 (313 ms, 11.22%)</title><rect x="773.4" y="245" width="132.2" height="15.0" fill="rgb(205,188,3)" rx="2" ry="2" />
+<text  x="776.36" y="255.5" >query._fetch_all..</text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="107.7" y="101" width="0.2" height="15.0" fill="rgb(246,50,2)" rx="2" ry="2" />
+<text  x="110.66" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.as_sql`hit10 (287 ms, 10.28%)</title><rect x="210.4" y="197" width="121.5" height="15.0" fill="rgb(233,79,5)" rx="2" ry="2" />
+<text  x="213.37" y="207.5" >compiler.as_sql..</text>
+</g>
+<g >
+<title>query.__init__`hit20 (9 ms, 0.32%)</title><rect x="668.0" y="229" width="3.6" height="15.0" fill="rgb(245,193,29)" rx="2" ry="2" />
+<text  x="671.02" y="239.5" ></text>
+</g>
+<g >
+<title>related_lookups.get_prep_lookup`hit10 (27 ms, 0.97%)</title><rect x="723.9" y="133" width="11.6" height="15.0" fill="rgb(225,175,11)" rx="2" ry="2" />
+<text  x="726.85" y="143.5" ></text>
+</g>
+<g >
+<title>query.check_filterable`hit20 (1 ms, 0.04%)</title><rect x="735.5" y="165" width="0.3" height="15.0" fill="rgb(237,124,42)" rx="2" ry="2" />
+<text  x="738.47" y="175.5" ></text>
+</g>
+<g >
+<title>lookups.as_sql`hit10 (43 ms, 1.54%)</title><rect x="805.8" y="117" width="18.1" height="15.0" fill="rgb(221,47,47)" rx="2" ry="2" />
+<text  x="808.82" y="127.5" ></text>
+</g>
+<g >
+<title>query.setup_joins`hit10 (4 ms, 0.14%)</title><rect x="572.5" y="165" width="1.7" height="15.0" fill="rgb(245,188,1)" rx="2" ry="2" />
+<text  x="575.45" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (55 ms, 1.97%)</title><rect x="424.6" y="165" width="23.1" height="15.0" fill="rgb(213,127,39)" rx="2" ry="2" />
+<text  x="427.62" y="175.5" >c..</text>
+</g>
+<g >
+<title>where.as_sql`hit10 (107 ms, 3.83%)</title><rect x="946.8" y="149" width="45.3" height="15.0" fill="rgb(215,217,24)" rx="2" ry="2" />
+<text  x="949.83" y="159.5" >wher..</text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="914.2" y="213" width="0.2" height="15.0" fill="rgb(218,201,24)" rx="2" ry="2" />
+<text  x="917.20" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.__init__`hit10 (1 ms, 0.04%)</title><rect x="1094.3" y="181" width="0.2" height="15.0" fill="rgb(216,112,44)" rx="2" ry="2" />
+<text  x="1097.29" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.get_converters`hit10 (49 ms, 1.76%)</title><rect x="338.8" y="197" width="20.9" height="15.0" fill="rgb(210,159,19)" rx="2" ry="2" />
+<text  x="341.79" y="207.5" ></text>
+</g>
+<g >
+<title>mixins.is_cached`hit30 (22 ms, 0.79%)</title><rect x="194.1" y="165" width="9.2" height="15.0" fill="rgb(218,184,15)" rx="2" ry="2" />
+<text  x="197.08" y="175.5" ></text>
+</g>
+<g >
+<title>query.table_alias`hit10 (0 ms, 0.00%)</title><rect x="743.0" y="133" width="0.1" height="15.0" fill="rgb(236,152,40)" rx="2" ry="2" />
+<text  x="745.99" y="143.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (18 ms, 0.65%)</title><rect x="55.6" y="213" width="7.4" height="15.0" fill="rgb(229,95,22)" rx="2" ry="2" />
+<text  x="58.55" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (88 ms, 3.15%)</title><rect x="214.7" y="181" width="37.1" height="15.0" fill="rgb(240,8,34)" rx="2" ry="2" />
+<text  x="217.72" y="191.5" >com..</text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (1 ms, 0.04%)</title><rect x="384.3" y="197" width="0.5" height="15.0" fill="rgb(232,92,18)" rx="2" ry="2" />
+<text  x="387.30" y="207.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (1 ms, 0.04%)</title><rect x="580.7" y="133" width="0.3" height="15.0" fill="rgb(253,76,13)" rx="2" ry="2" />
+<text  x="583.74" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit40 (1 ms, 0.04%)</title><rect x="358.0" y="165" width="0.6" height="15.0" fill="rgb(246,204,44)" rx="2" ry="2" />
+<text  x="360.99" y="175.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (3 ms, 0.11%)</title><rect x="1143.0" y="149" width="1.1" height="15.0" fill="rgb(229,46,4)" rx="2" ry="2" />
+<text  x="1145.97" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit40 (2 ms, 0.07%)</title><rect x="357.3" y="165" width="0.7" height="15.0" fill="rgb(237,228,1)" rx="2" ry="2" />
+<text  x="360.25" y="175.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (12 ms, 0.43%)</title><rect x="754.8" y="149" width="4.9" height="15.0" fill="rgb(226,1,39)" rx="2" ry="2" />
+<text  x="757.76" y="159.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="583.3" y="197" width="0.2" height="15.0" fill="rgb(220,93,50)" rx="2" ry="2" />
+<text  x="586.29" y="207.5" ></text>
+</g>
+<g >
+<title>query.chain`hit10 (13 ms, 0.47%)</title><rect x="1170.6" y="197" width="5.3" height="15.0" fill="rgb(249,55,39)" rx="2" ry="2" />
+<text  x="1173.60" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit30 (1 ms, 0.04%)</title><rect x="1083.0" y="165" width="0.4" height="15.0" fill="rgb(243,226,22)" rx="2" ry="2" />
+<text  x="1085.99" y="175.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (0 ms, 0.00%)</title><rect x="497.7" y="117" width="0.2" height="15.0" fill="rgb(211,55,31)" rx="2" ry="2" />
+<text  x="500.73" y="127.5" ></text>
+</g>
+<g >
+<title>query.build_filter`hit10 (104 ms, 3.73%)</title><rect x="1113.1" y="181" width="44.1" height="15.0" fill="rgb(247,100,10)" rx="2" ry="2" />
+<text  x="1116.11" y="191.5" >quer..</text>
+</g>
+<g >
+<title>query.solve_lookup_type`hit10 (10 ms, 0.36%)</title><rect x="1152.7" y="165" width="4.4" height="15.0" fill="rgb(207,198,20)" rx="2" ry="2" />
+<text  x="1155.71" y="175.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="448.5" y="149" width="0.1" height="15.0" fill="rgb(231,126,8)" rx="2" ry="2" />
+<text  x="451.45" y="159.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (0 ms, 0.00%)</title><rect x="88.3" y="117" width="0.2" height="15.0" fill="rgb(220,187,29)" rx="2" ry="2" />
+<text  x="91.31" y="127.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_prep_value`hit10 (0 ms, 0.00%)</title><rect x="991.9" y="53" width="0.2" height="15.0" fill="rgb(222,190,32)" rx="2" ry="2" />
+<text  x="994.94" y="63.5" ></text>
+</g>
+<g >
+<title>query.check_query_object_type`hit10 (10 ms, 0.36%)</title><rect x="110.0" y="149" width="4.3" height="15.0" fill="rgb(250,50,10)" rx="2" ry="2" />
+<text  x="113.05" y="159.5" ></text>
+</g>
+<g >
+<title>query.chain`hit10 (7 ms, 0.25%)</title><rect x="60.1" y="181" width="2.9" height="15.0" fill="rgb(234,37,25)" rx="2" ry="2" />
+<text  x="63.10" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="1142.8" y="149" width="0.2" height="15.0" fill="rgb(221,189,36)" rx="2" ry="2" />
+<text  x="1145.83" y="159.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="569.9" y="149" width="0.2" height="15.0" fill="rgb(222,178,6)" rx="2" ry="2" />
+<text  x="572.92" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit30 (29 ms, 1.04%)</title><rect x="1025.6" y="101" width="12.4" height="15.0" fill="rgb(227,174,0)" rx="2" ry="2" />
+<text  x="1028.62" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (12 ms, 0.43%)</title><rect x="970.8" y="69" width="5.0" height="15.0" fill="rgb(225,30,48)" rx="2" ry="2" />
+<text  x="973.81" y="79.5" ></text>
+</g>
+<g >
+<title>compiler.setup_query`hit10 (94 ms, 3.37%)</title><rect x="456.1" y="149" width="39.7" height="15.0" fill="rgb(210,147,13)" rx="2" ry="2" />
+<text  x="459.07" y="159.5" >com..</text>
+</g>
+<g >
+<title>query_utils.get_lookup`hit10 (6 ms, 0.22%)</title><rect x="1133.9" y="133" width="2.5" height="15.0" fill="rgb(250,123,20)" rx="2" ry="2" />
+<text  x="1136.90" y="143.5" ></text>
+</g>
+<g >
+<title>query_utils.__init__`hit10 (0 ms, 0.00%)</title><rect x="771.7" y="213" width="0.2" height="15.0" fill="rgb(238,98,19)" rx="2" ry="2" />
+<text  x="774.70" y="223.5" ></text>
+</g>
+<g >
+<title>expressions.__init__`hit10 (0 ms, 0.00%)</title><rect x="869.9" y="69" width="0.1" height="15.0" fill="rgb(206,223,7)" rx="2" ry="2" />
+<text  x="872.86" y="79.5" ></text>
+</g>
+<g >
+<title>query._not_support_combined_queries`hit10 (1 ms, 0.04%)</title><rect x="583.8" y="229" width="0.3" height="15.0" fill="rgb(219,139,46)" rx="2" ry="2" />
+<text  x="586.79" y="239.5" ></text>
+</g>
+<g >
+<title>where.as_sql`hit10 (47 ms, 1.68%)</title><rect x="804.0" y="165" width="19.9" height="15.0" fill="rgb(248,19,20)" rx="2" ry="2" />
+<text  x="806.97" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.db_type`hit10 (6 ms, 0.22%)</title><rect x="432.8" y="85" width="2.6" height="15.0" fill="rgb(248,90,4)" rx="2" ry="2" />
+<text  x="435.82" y="95.5" ></text>
+</g>
+<g >
+<title>__init__.__eq__`hit30 (1 ms, 0.04%)</title><rect x="314.7" y="101" width="0.4" height="15.0" fill="rgb(245,124,37)" rx="2" ry="2" />
+<text  x="317.69" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.get_order_by`hit10 (0 ms, 0.00%)</title><rect x="455.9" y="149" width="0.2" height="15.0" fill="rgb(211,186,40)" rx="2" ry="2" />
+<text  x="458.91" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.get_group_by`hit10 (0 ms, 0.00%)</title><rect x="264.3" y="165" width="0.1" height="15.0" fill="rgb(236,45,30)" rx="2" ry="2" />
+<text  x="267.30" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="435.3" y="69" width="0.1" height="15.0" fill="rgb(248,67,25)" rx="2" ry="2" />
+<text  x="438.25" y="79.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="1157.0" y="133" width="0.1" height="15.0" fill="rgb(252,163,42)" rx="2" ry="2" />
+<text  x="1159.96" y="143.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="583.0" y="165" width="0.1" height="15.0" fill="rgb(237,156,14)" rx="2" ry="2" />
+<text  x="585.95" y="175.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (16 ms, 0.57%)</title><rect x="530.6" y="213" width="6.7" height="15.0" fill="rgb(245,4,9)" rx="2" ry="2" />
+<text  x="533.62" y="223.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (0 ms, 0.00%)</title><rect x="62.8" y="149" width="0.2" height="15.0" fill="rgb(250,193,19)" rx="2" ry="2" />
+<text  x="65.80" y="159.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__get__`hit20 (32 ms, 1.15%)</title><rect x="1176.4" y="261" width="13.6" height="15.0" fill="rgb(207,186,29)" rx="2" ry="2" />
+<text  x="1179.37" y="271.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (3 ms, 0.11%)</title><rect x="99.5" y="117" width="1.5" height="15.0" fill="rgb(217,2,32)" rx="2" ry="2" />
+<text  x="102.52" y="127.5" ></text>
+</g>
+<g >
+<title>manager._set_creation_counter`hit20 (1 ms, 0.04%)</title><rect x="1189.3" y="229" width="0.4" height="15.0" fill="rgb(220,86,38)" rx="2" ry="2" />
+<text  x="1192.33" y="239.5" ></text>
+</g>
+<g >
+<title>__init__.__init__`hit10 (1 ms, 0.04%)</title><rect x="818.0" y="53" width="0.2" height="15.0" fill="rgb(232,63,38)" rx="2" ry="2" />
+<text  x="820.98" y="63.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit40 (31 ms, 1.11%)</title><rect x="839.4" y="133" width="13.1" height="15.0" fill="rgb(249,129,20)" rx="2" ry="2" />
+<text  x="842.42" y="143.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (13 ms, 0.47%)</title><rect x="532.0" y="197" width="5.3" height="15.0" fill="rgb(217,79,32)" rx="2" ry="2" />
+<text  x="534.98" y="207.5" ></text>
+</g>
+<g >
+<title>where.clone`hit10 (0 ms, 0.00%)</title><rect x="690.5" y="149" width="0.2" height="15.0" fill="rgb(209,133,45)" rx="2" ry="2" />
+<text  x="693.51" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.set_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="986.5" y="53" width="0.1" height="15.0" fill="rgb(238,69,18)" rx="2" ry="2" />
+<text  x="989.51" y="63.5" ></text>
+</g>
+<g >
+<title>query.build_lookup`hit10 (46 ms, 1.65%)</title><rect x="88.5" y="165" width="19.4" height="15.0" fill="rgb(211,216,35)" rx="2" ry="2" />
+<text  x="91.54" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_from_clause`hit10 (6 ms, 0.22%)</title><rect x="448.6" y="165" width="2.6" height="15.0" fill="rgb(237,68,40)" rx="2" ry="2" />
+<text  x="451.58" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="248.0" y="37" width="0.2" height="15.0" fill="rgb(251,91,31)" rx="2" ry="2" />
+<text  x="251.03" y="47.5" ></text>
+</g>
+<g >
+<title>query.clone`hit10 (3 ms, 0.11%)</title><rect x="589.5" y="181" width="1.5" height="15.0" fill="rgb(237,15,29)" rx="2" ry="2" />
+<text  x="592.55" y="191.5" ></text>
+</g>
+<g >
+<title>query.promote_joins`hit10 (0 ms, 0.00%)</title><rect x="771.4" y="165" width="0.2" height="15.0" fill="rgb(232,164,8)" rx="2" ry="2" />
+<text  x="774.42" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.get_lookup`hit10 (6 ms, 0.22%)</title><rect x="90.9" y="149" width="2.6" height="15.0" fill="rgb(225,56,3)" rx="2" ry="2" />
+<text  x="93.86" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.pre_sql_setup`hit10 (175 ms, 6.27%)</title><rect x="996.1" y="165" width="74.1" height="15.0" fill="rgb(218,222,21)" rx="2" ry="2" />
+<text  x="999.14" y="175.5" >compiler..</text>
+</g>
+<g >
+<title>compiler.__init__`hit10 (0 ms, 0.00%)</title><rect x="897.9" y="197" width="0.2" height="15.0" fill="rgb(210,210,21)" rx="2" ry="2" />
+<text  x="900.90" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.__init__`hit10 (0 ms, 0.00%)</title><rect x="365.3" y="197" width="0.2" height="15.0" fill="rgb(207,37,50)" rx="2" ry="2" />
+<text  x="368.28" y="207.5" ></text>
+</g>
+<g >
+<title>query._get_col`hit10 (7 ms, 0.25%)</title><rect x="85.4" y="165" width="3.1" height="15.0" fill="rgb(208,146,10)" rx="2" ry="2" />
+<text  x="88.44" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (5 ms, 0.18%)</title><rect x="993.8" y="149" width="2.3" height="15.0" fill="rgb(234,68,41)" rx="2" ry="2" />
+<text  x="996.83" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.get_select`hit10 (148 ms, 5.30%)</title><rect x="1004.8" y="133" width="62.4" height="15.0" fill="rgb(254,136,6)" rx="2" ry="2" />
+<text  x="1007.76" y="143.5" >compil..</text>
+</g>
+<g >
+<title>datastructures.as_sql`hit10 (4 ms, 0.14%)</title><rect x="826.3" y="149" width="1.5" height="15.0" fill="rgb(208,201,15)" rx="2" ry="2" />
+<text  x="829.33" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit20 (1 ms, 0.04%)</title><rect x="438.9" y="37" width="0.3" height="15.0" fill="rgb(250,98,19)" rx="2" ry="2" />
+<text  x="441.91" y="47.5" ></text>
+</g>
+<g >
+<title>query._get_col`hit10 (8 ms, 0.29%)</title><rect x="1127.1" y="165" width="3.5" height="15.0" fill="rgb(221,41,50)" rx="2" ry="2" />
+<text  x="1130.07" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.get_db_converters`hit40 (30 ms, 1.08%)</title><rect x="347.1" y="181" width="12.6" height="15.0" fill="rgb(209,7,35)" rx="2" ry="2" />
+<text  x="350.10" y="191.5" ></text>
+</g>
+<g >
+<title>base.__get__`hit30 (1 ms, 0.04%)</title><rect x="202.5" y="149" width="0.4" height="15.0" fill="rgb(250,191,9)" rx="2" ry="2" />
+<text  x="205.49" y="159.5" ></text>
+</g>
+<g >
+<title>query.get_related_populators`hit10 (0 ms, 0.00%)</title><rect x="521.0" y="197" width="0.2" height="15.0" fill="rgb(221,44,27)" rx="2" ry="2" />
+<text  x="524.01" y="207.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="154.4" y="229" width="0.2" height="15.0" fill="rgb(222,204,31)" rx="2" ry="2" />
+<text  x="157.45" y="239.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="491.8" y="101" width="0.2" height="15.0" fill="rgb(240,150,25)" rx="2" ry="2" />
+<text  x="494.83" y="111.5" ></text>
+</g>
+<g >
+<title>lookups.as_sql`hit10 (74 ms, 2.65%)</title><rect x="220.6" y="117" width="31.2" height="15.0" fill="rgb(234,108,49)" rx="2" ry="2" />
+<text  x="223.63" y="127.5" >lo..</text>
+</g>
+<g >
+<title>lookups.get_rhs_op`hit10 (0 ms, 0.00%)</title><rect x="223.2" y="101" width="0.2" height="15.0" fill="rgb(247,73,28)" rx="2" ry="2" />
+<text  x="226.20" y="111.5" ></text>
+</g>
+<g >
+<title>query_utils._get_lookup`hit10 (0 ms, 0.00%)</title><rect x="1136.1" y="117" width="0.3" height="15.0" fill="rgb(222,35,14)" rx="2" ry="2" />
+<text  x="1139.15" y="127.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (8 ms, 0.29%)</title><rect x="139.5" y="149" width="3.4" height="15.0" fill="rgb(209,145,47)" rx="2" ry="2" />
+<text  x="142.46" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit40 (50 ms, 1.79%)</title><rect x="279.4" y="133" width="21.3" height="15.0" fill="rgb(240,225,35)" rx="2" ry="2" />
+<text  x="282.40" y="143.5" >c..</text>
+</g>
+<g >
+<title>compiler.cursor_iter`hit10 (2 ms, 0.07%)</title><rect x="497.9" y="181" width="0.7" height="15.0" fill="rgb(209,67,50)" rx="2" ry="2" />
+<text  x="500.90" y="191.5" ></text>
+</g>
+<g >
+<title>related.get_col`hit10 (12 ms, 0.43%)</title><rect x="319.0" y="117" width="4.9" height="15.0" fill="rgb(245,111,36)" rx="2" ry="2" />
+<text  x="322.04" y="127.5" ></text>
+</g>
+<g >
+<title>query._clone`hit10 (23 ms, 0.82%)</title><rect x="681.0" y="197" width="9.7" height="15.0" fill="rgb(233,161,47)" rx="2" ry="2" />
+<text  x="683.99" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.__hash__`hit10 (0 ms, 0.00%)</title><rect x="37.5" y="245" width="0.2" height="15.0" fill="rgb(227,88,30)" rx="2" ry="2" />
+<text  x="40.51" y="255.5" ></text>
+</g>
+<g >
+<title>query.get_related_populators`hit10 (0 ms, 0.00%)</title><rect x="365.5" y="213" width="0.1" height="15.0" fill="rgb(230,36,53)" rx="2" ry="2" />
+<text  x="368.49" y="223.5" ></text>
+</g>
+<g >
+<title>__init__.select_format`hit30 (1 ms, 0.04%)</title><rect x="1066.8" y="101" width="0.4" height="15.0" fill="rgb(220,129,42)" rx="2" ry="2" />
+<text  x="1069.77" y="111.5" ></text>
+</g>
+<g >
+<title>query.unref_alias`hit20 (1 ms, 0.04%)</title><rect x="337.8" y="181" width="0.3" height="15.0" fill="rgb(214,98,13)" rx="2" ry="2" />
+<text  x="340.77" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (6 ms, 0.22%)</title><rect x="255.4" y="165" width="2.3" height="15.0" fill="rgb(233,32,41)" rx="2" ry="2" />
+<text  x="258.37" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="809.1" y="85" width="0.1" height="15.0" fill="rgb(243,17,54)" rx="2" ry="2" />
+<text  x="812.08" y="95.5" ></text>
+</g>
+<g >
+<title>where.split_having`hit10 (6 ms, 0.22%)</title><rect x="329.5" y="165" width="2.4" height="15.0" fill="rgb(231,124,14)" rx="2" ry="2" />
+<text  x="332.49" y="175.5" ></text>
+</g>
+<g >
+<title>mixins.is_cached`hit30 (15 ms, 0.54%)</title><rect x="791.0" y="165" width="6.2" height="15.0" fill="rgb(205,31,21)" rx="2" ry="2" />
+<text  x="794.01" y="175.5" ></text>
+</g>
+<g >
+<title>query_utils._get_lookup`hit10 (1 ms, 0.04%)</title><rect x="561.4" y="117" width="0.3" height="15.0" fill="rgb(240,24,19)" rx="2" ry="2" />
+<text  x="564.38" y="127.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="771.3" y="165" width="0.1" height="15.0" fill="rgb(236,29,39)" rx="2" ry="2" />
+<text  x="774.27" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="435.4" y="85" width="0.1" height="15.0" fill="rgb(232,129,51)" rx="2" ry="2" />
+<text  x="438.39" y="95.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="1061.7" y="101" width="0.1" height="15.0" fill="rgb(236,108,0)" rx="2" ry="2" />
+<text  x="1064.70" y="111.5" ></text>
+</g>
+<g >
+<title>query._not_support_combined_queries`hit10 (0 ms, 0.00%)</title><rect x="148.0" y="229" width="0.1" height="15.0" fill="rgb(232,107,13)" rx="2" ry="2" />
+<text  x="150.96" y="239.5" ></text>
+</g>
+<g >
+<title>related.get_col`hit10 (5 ms, 0.18%)</title><rect x="86.2" y="149" width="2.3" height="15.0" fill="rgb(254,219,39)" rx="2" ry="2" />
+<text  x="89.25" y="159.5" ></text>
+</g>
+<g >
+<title>base.__init__`hit30 (48 ms, 1.72%)</title><rect x="183.1" y="197" width="20.2" height="15.0" fill="rgb(210,219,49)" rx="2" ry="2" />
+<text  x="186.13" y="207.5" ></text>
+</g>
+<g >
+<title>query.trim_joins`hit10 (0 ms, 0.00%)</title><rect x="1157.1" y="165" width="0.1" height="15.0" fill="rgb(240,184,31)" rx="2" ry="2" />
+<text  x="1160.09" y="175.5" ></text>
+</g>
+<g >
+<title>query.deferred_to_data`hit10 (0 ms, 0.00%)</title><rect x="316.5" y="101" width="0.2" height="15.0" fill="rgb(242,26,7)" rx="2" ry="2" />
+<text  x="319.55" y="111.5" ></text>
+</g>
+<g >
+<title>expressions.resolve_expression`hit10 (6 ms, 0.22%)</title><rect x="813.3" y="69" width="2.5" height="15.0" fill="rgb(243,37,38)" rx="2" ry="2" />
+<text  x="816.25" y="79.5" ></text>
+</g>
+<g >
+<title>compiler.get_converters`hit10 (43 ms, 1.54%)</title><rect x="501.4" y="181" width="18.3" height="15.0" fill="rgb(243,220,29)" rx="2" ry="2" />
+<text  x="504.40" y="191.5" ></text>
+</g>
+<g >
+<title>base.from_db`hit10 (7 ms, 0.25%)</title><rect x="409.1" y="181" width="2.8" height="15.0" fill="rgb(214,174,12)" rx="2" ry="2" />
+<text  x="412.09" y="191.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit10 (6 ms, 0.22%)</title><rect x="233.2" y="53" width="2.4" height="15.0" fill="rgb(238,40,9)" rx="2" ry="2" />
+<text  x="236.22" y="63.5" ></text>
+</g>
+<g >
+<title>expressions.set_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="444.7" y="53" width="0.1" height="15.0" fill="rgb(212,38,10)" rx="2" ry="2" />
+<text  x="447.66" y="63.5" ></text>
+</g>
+<g >
+<title>query.build_filter`hit10 (89 ms, 3.19%)</title><rect x="543.7" y="181" width="37.5" height="15.0" fill="rgb(209,66,5)" rx="2" ry="2" />
+<text  x="546.72" y="191.5" >que..</text>
+</g>
+<g >
+<title>manager.__new__`hit10 (0 ms, 0.00%)</title><rect x="595.7" y="245" width="0.2" height="15.0" fill="rgb(239,7,27)" rx="2" ry="2" />
+<text  x="598.70" y="255.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (7 ms, 0.25%)</title><rect x="133.7" y="149" width="2.9" height="15.0" fill="rgb(218,156,10)" rx="2" ry="2" />
+<text  x="136.70" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.as_sql`hit10 (179 ms, 6.41%)</title><rect x="800.7" y="197" width="75.7" height="15.0" fill="rgb(247,77,23)" rx="2" ry="2" />
+<text  x="803.72" y="207.5" >compiler..</text>
+</g>
+<g >
+<title>query._filter_or_exclude`hit10 (232 ms, 8.31%)</title><rect x="49.9" y="229" width="98.1" height="15.0" fill="rgb(234,84,45)" rx="2" ry="2" />
+<text  x="52.91" y="239.5" >query._filt..</text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit20 (1 ms, 0.04%)</title><rect x="235.3" y="37" width="0.3" height="15.0" fill="rgb(210,218,5)" rx="2" ry="2" />
+<text  x="238.26" y="47.5" ></text>
+</g>
+<g >
+<title>compiler.get_order_by`hit10 (4 ms, 0.14%)</title><rect x="264.4" y="165" width="1.6" height="15.0" fill="rgb(252,37,45)" rx="2" ry="2" />
+<text  x="267.44" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="733.6" y="69" width="0.1" height="15.0" fill="rgb(231,15,19)" rx="2" ry="2" />
+<text  x="736.59" y="79.5" ></text>
+</g>
+<g >
+<title>query._add_q`hit10 (104 ms, 3.73%)</title><rect x="539.2" y="197" width="44.1" height="15.0" fill="rgb(218,171,29)" rx="2" ry="2" />
+<text  x="542.20" y="207.5" >quer..</text>
+</g>
+<g >
+<title>views.results`hit10 (1,386 ms, 49.67%)</title><rect x="10.0" y="277" width="585.9" height="15.0" fill="rgb(223,113,14)" rx="2" ry="2" />
+<text  x="13.00" y="287.5" >views.results`hit10</text>
+</g>
+<g >
+<title>__init__.get_prep_value`hit10 (0 ms, 0.00%)</title><rect x="105.5" y="69" width="0.2" height="15.0" fill="rgb(234,178,18)" rx="2" ry="2" />
+<text  x="108.54" y="79.5" ></text>
+</g>
+<g >
+<title>query.resolve_lookup_value`hit10 (0 ms, 0.00%)</title><rect x="121.6" y="165" width="0.1" height="15.0" fill="rgb(233,157,11)" rx="2" ry="2" />
+<text  x="124.56" y="175.5" ></text>
+</g>
+<g >
+<title>related.get_db_converters`hit10 (3 ms, 0.11%)</title><rect x="358.6" y="165" width="1.1" height="15.0" fill="rgb(249,32,46)" rx="2" ry="2" />
+<text  x="361.57" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (3 ms, 0.11%)</title><rect x="712.9" y="133" width="1.2" height="15.0" fill="rgb(254,5,10)" rx="2" ry="2" />
+<text  x="715.93" y="143.5" ></text>
+</g>
+<g >
+<title>query.promote_joins`hit10 (0 ms, 0.00%)</title><rect x="147.5" y="165" width="0.2" height="15.0" fill="rgb(236,34,35)" rx="2" ry="2" />
+<text  x="150.50" y="175.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (10 ms, 0.36%)</title><rect x="819.7" y="101" width="4.2" height="15.0" fill="rgb(207,4,51)" rx="2" ry="2" />
+<text  x="822.70" y="111.5" ></text>
+</g>
+<g >
+<title>expressions.as_sql`hit10 (9 ms, 0.32%)</title><rect x="971.9" y="53" width="3.9" height="15.0" fill="rgb(238,25,14)" rx="2" ry="2" />
+<text  x="974.94" y="63.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (22 ms, 0.79%)</title><rect x="1166.8" y="229" width="9.1" height="15.0" fill="rgb(221,94,39)" rx="2" ry="2" />
+<text  x="1169.83" y="239.5" ></text>
+</g>
+<g >
+<title>expressions.__init__`hit10 (2 ms, 0.07%)</title><rect x="869.1" y="85" width="0.9" height="15.0" fill="rgb(249,119,4)" rx="2" ry="2" />
+<text  x="872.09" y="95.5" ></text>
+</g>
+<g >
+<title>expressions.copy`hit10 (4 ms, 0.14%)</title><rect x="442.9" y="53" width="1.6" height="15.0" fill="rgb(239,58,3)" rx="2" ry="2" />
+<text  x="445.92" y="63.5" ></text>
+</g>
+<g >
+<title>query.join_parent_model`hit30 (1 ms, 0.04%)</title><rect x="1061.8" y="101" width="0.4" height="15.0" fill="rgb(206,176,11)" rx="2" ry="2" />
+<text  x="1064.84" y="111.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (9 ms, 0.32%)</title><rect x="248.2" y="101" width="3.6" height="15.0" fill="rgb(214,198,31)" rx="2" ry="2" />
+<text  x="251.17" y="111.5" ></text>
+</g>
+<g >
+<title>query.reset_refcounts`hit10 (7 ms, 0.25%)</title><rect x="334.9" y="197" width="3.2" height="15.0" fill="rgb(239,216,49)" rx="2" ry="2" />
+<text  x="337.94" y="207.5" ></text>
+</g>
+<g >
+<title>lookups.get_rhs_op`hit10 (0 ms, 0.00%)</title><rect x="958.2" y="101" width="0.1" height="15.0" fill="rgb(242,115,6)" rx="2" ry="2" />
+<text  x="961.18" y="111.5" ></text>
+</g>
+<g >
+<title>related.get_db_converters`hit10 (3 ms, 0.11%)</title><rect x="892.8" y="165" width="1.1" height="15.0" fill="rgb(218,76,34)" rx="2" ry="2" />
+<text  x="895.80" y="175.5" ></text>
+</g>
+<g >
+<title>query.check_filterable`hit20 (1 ms, 0.04%)</title><rect x="1139.3" y="165" width="0.3" height="15.0" fill="rgb(211,109,18)" rx="2" ry="2" />
+<text  x="1142.30" y="175.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (4 ms, 0.14%)</title><rect x="127.8" y="149" width="1.5" height="15.0" fill="rgb(234,131,41)" rx="2" ry="2" />
+<text  x="130.76" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.as_sql`hit10 (49 ms, 1.76%)</title><rect x="426.9" y="117" width="20.8" height="15.0" fill="rgb(224,137,48)" rx="2" ry="2" />
+<text  x="429.87" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.__getstate__`hit10 (0 ms, 0.00%)</title><rect x="815.4" y="37" width="0.1" height="15.0" fill="rgb(206,147,29)" rx="2" ry="2" />
+<text  x="818.37" y="47.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="686.1" y="181" width="0.2" height="15.0" fill="rgb(246,7,17)" rx="2" ry="2" />
+<text  x="689.11" y="191.5" ></text>
+</g>
+<g >
+<title>query.set_limits`hit10 (0 ms, 0.00%)</title><rect x="591.2" y="245" width="0.2" height="15.0" fill="rgb(231,63,52)" rx="2" ry="2" />
+<text  x="594.23" y="255.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="733.7" y="117" width="0.2" height="15.0" fill="rgb(206,71,22)" rx="2" ry="2" />
+<text  x="736.73" y="127.5" ></text>
+</g>
+<g >
+<title>query.ref_alias`hit10 (0 ms, 0.00%)</title><rect x="865.8" y="101" width="0.2" height="15.0" fill="rgb(244,211,34)" rx="2" ry="2" />
+<text  x="868.83" y="111.5" ></text>
+</g>
+<g >
+<title>related_lookups.get_normalized_value`hit10 (5 ms, 0.18%)</title><rect x="105.9" y="117" width="2.0" height="15.0" fill="rgb(207,150,10)" rx="2" ry="2" />
+<text  x="108.86" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.deferred_to_columns`hit10 (3 ms, 0.11%)</title><rect x="315.4" y="117" width="1.3" height="15.0" fill="rgb(239,8,10)" rx="2" ry="2" />
+<text  x="318.38" y="127.5" ></text>
+</g>
+<g >
+<title>expressions.copy`hit10 (5 ms, 0.18%)</title><rect x="240.6" y="53" width="2.2" height="15.0" fill="rgb(205,177,0)" rx="2" ry="2" />
+<text  x="243.61" y="63.5" ></text>
+</g>
+<g >
+<title>query_utils.__get__`hit30 (1 ms, 0.04%)</title><rect x="898.3" y="213" width="0.4" height="15.0" fill="rgb(219,225,48)" rx="2" ry="2" />
+<text  x="901.25" y="223.5" ></text>
+</g>
+<g >
+<title>query.can_filter`hit10 (0 ms, 0.00%)</title><rect x="1094.6" y="245" width="0.2" height="15.0" fill="rgb(248,35,2)" rx="2" ry="2" />
+<text  x="1097.65" y="255.5" ></text>
+</g>
+<g >
+<title>__init__.select_format`hit30 (1 ms, 0.04%)</title><rect x="495.4" y="101" width="0.4" height="15.0" fill="rgb(214,106,54)" rx="2" ry="2" />
+<text  x="498.36" y="111.5" ></text>
+</g>
+<g >
+<title>compiler.results_iter`hit10 (48 ms, 1.72%)</title><rect x="499.6" y="197" width="20.1" height="15.0" fill="rgb(251,150,50)" rx="2" ry="2" />
+<text  x="502.61" y="207.5" ></text>
+</g>
+<g >
+<title>__init__.db_type`hit10 (3 ms, 0.11%)</title><rect x="818.2" y="53" width="1.5" height="15.0" fill="rgb(207,109,3)" rx="2" ry="2" />
+<text  x="821.24" y="63.5" ></text>
+</g>
+<g >
+<title>base.__get__`hit30 (1 ms, 0.04%)</title><rect x="796.4" y="149" width="0.4" height="15.0" fill="rgb(225,117,53)" rx="2" ry="2" />
+<text  x="799.43" y="159.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (0 ms, 0.00%)</title><rect x="1142.7" y="149" width="0.1" height="15.0" fill="rgb(251,179,54)" rx="2" ry="2" />
+<text  x="1145.69" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.__init__`hit10 (1 ms, 0.04%)</title><rect x="520.8" y="181" width="0.2" height="15.0" fill="rgb(208,160,42)" rx="2" ry="2" />
+<text  x="523.75" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="119.8" y="149" width="0.2" height="15.0" fill="rgb(233,179,49)" rx="2" ry="2" />
+<text  x="122.80" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.resolve_expression`hit10 (13 ms, 0.47%)</title><rect x="439.2" y="69" width="5.6" height="15.0" fill="rgb(221,0,49)" rx="2" ry="2" />
+<text  x="442.19" y="79.5" ></text>
+</g>
+<g >
+<title>expressions.select_format`hit30 (12 ms, 0.43%)</title><rect x="1062.2" y="117" width="5.0" height="15.0" fill="rgb(210,86,18)" rx="2" ry="2" />
+<text  x="1065.24" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit20 (1 ms, 0.04%)</title><rect x="975.5" y="37" width="0.3" height="15.0" fill="rgb(231,113,43)" rx="2" ry="2" />
+<text  x="978.46" y="47.5" ></text>
+</g>
+<g >
+<title>compiler.get_distinct`hit10 (2 ms, 0.07%)</title><rect x="447.7" y="165" width="0.9" height="15.0" fill="rgb(244,69,52)" rx="2" ry="2" />
+<text  x="450.70" y="175.5" ></text>
+</g>
+<g >
+<title>query.is_nullable`hit10 (1 ms, 0.04%)</title><rect x="129.3" y="149" width="0.3" height="15.0" fill="rgb(245,71,5)" rx="2" ry="2" />
+<text  x="132.28" y="159.5" ></text>
+</g>
+<g >
+<title>lookups.get_prep_lookup`hit10 (6 ms, 0.22%)</title><rect x="562.7" y="133" width="2.6" height="15.0" fill="rgb(220,199,1)" rx="2" ry="2" />
+<text  x="565.69" y="143.5" ></text>
+</g>
+<g >
+<title>query._add_hints`hit10 (0 ms, 0.00%)</title><rect x="671.6" y="245" width="0.2" height="15.0" fill="rgb(239,168,44)" rx="2" ry="2" />
+<text  x="674.61" y="255.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (3 ms, 0.11%)</title><rect x="1151.6" y="149" width="1.1" height="15.0" fill="rgb(243,117,22)" rx="2" ry="2" />
+<text  x="1154.57" y="159.5" ></text>
+</g>
+<g >
+<title>query.reset_refcounts`hit10 (4 ms, 0.14%)</title><rect x="877.5" y="197" width="1.8" height="15.0" fill="rgb(212,69,0)" rx="2" ry="2" />
+<text  x="880.49" y="207.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (44 ms, 1.58%)</title><rect x="366.1" y="213" width="18.7" height="15.0" fill="rgb(228,98,15)" rx="2" ry="2" />
+<text  x="369.11" y="223.5" ></text>
+</g>
+<g >
+<title>query.add_votes`hit10 (0 ms, 0.00%)</title><rect x="696.6" y="181" width="0.2" height="15.0" fill="rgb(210,126,41)" rx="2" ry="2" />
+<text  x="699.56" y="191.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="759.3" y="133" width="0.2" height="15.0" fill="rgb(213,26,8)" rx="2" ry="2" />
+<text  x="762.34" y="143.5" ></text>
+</g>
+<g >
+<title>query.filter`hit10 (237 ms, 8.49%)</title><rect x="671.8" y="245" width="100.2" height="15.0" fill="rgb(228,58,13)" rx="2" ry="2" />
+<text  x="674.78" y="255.5" >query.filter..</text>
+</g>
+<g >
+<title>__init__.__eq__`hit10 (1 ms, 0.04%)</title><rect x="322.6" y="85" width="0.3" height="15.0" fill="rgb(221,86,10)" rx="2" ry="2" />
+<text  x="325.58" y="95.5" ></text>
+</g>
+<g >
+<title>base.__init__`hit30 (26 ms, 0.93%)</title><rect x="786.4" y="197" width="10.8" height="15.0" fill="rgb(236,38,54)" rx="2" ry="2" />
+<text  x="789.41" y="207.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (1 ms, 0.04%)</title><rect x="534.6" y="181" width="0.3" height="15.0" fill="rgb(206,73,0)" rx="2" ry="2" />
+<text  x="537.61" y="191.5" ></text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="147.7" y="197" width="0.1" height="15.0" fill="rgb(207,177,29)" rx="2" ry="2" />
+<text  x="150.66" y="207.5" ></text>
+</g>
+<g >
+<title>expressions.get_db_converters`hit30 (23 ms, 0.82%)</title><rect x="1083.4" y="165" width="9.9" height="15.0" fill="rgb(244,6,37)" rx="2" ry="2" />
+<text  x="1086.40" y="175.5" ></text>
+</g>
+<g >
+<title>expressions.__getstate__`hit10 (0 ms, 0.00%)</title><rect x="242.6" y="37" width="0.2" height="15.0" fill="rgb(214,21,12)" rx="2" ry="2" />
+<text  x="245.58" y="47.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (4 ms, 0.14%)</title><rect x="316.7" y="117" width="1.6" height="15.0" fill="rgb(222,57,7)" rx="2" ry="2" />
+<text  x="319.71" y="127.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit30 (1 ms, 0.04%)</title><rect x="1092.9" y="149" width="0.4" height="15.0" fill="rgb(215,116,53)" rx="2" ry="2" />
+<text  x="1095.86" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.get_db_converters`hit30 (22 ms, 0.79%)</title><rect x="510.2" y="165" width="9.5" height="15.0" fill="rgb(222,39,15)" rx="2" ry="2" />
+<text  x="513.20" y="175.5" ></text>
+</g>
+<g >
+<title>datastructures.__eq__`hit10 (4 ms, 0.14%)</title><rect x="131.9" y="133" width="1.7" height="15.0" fill="rgb(236,172,8)" rx="2" ry="2" />
+<text  x="134.85" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.get_internal_type`hit10 (0 ms, 0.00%)</title><rect x="228.9" y="85" width="0.1" height="15.0" fill="rgb(248,52,21)" rx="2" ry="2" />
+<text  x="231.85" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.get_group_by`hit10 (0 ms, 0.00%)</title><rect x="1003.3" y="149" width="0.1" height="15.0" fill="rgb(248,80,11)" rx="2" ry="2" />
+<text  x="1006.29" y="159.5" ></text>
+</g>
+<g >
+<title>related.db_type`hit10 (9 ms, 0.32%)</title><rect x="815.8" y="85" width="3.9" height="15.0" fill="rgb(220,115,28)" rx="2" ry="2" />
+<text  x="818.78" y="95.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (544 ms, 19.49%)</title><rect x="154.6" y="229" width="230.2" height="15.0" fill="rgb(221,215,44)" rx="2" ry="2" />
+<text  x="157.59" y="239.5" >query.__iter__`hit10</text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="992.7" y="149" width="0.1" height="15.0" fill="rgb(226,12,45)" rx="2" ry="2" />
+<text  x="995.72" y="159.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="121.4" y="165" width="0.2" height="15.0" fill="rgb(208,110,50)" rx="2" ry="2" />
+<text  x="124.42" y="175.5" ></text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit40 (1 ms, 0.04%)</title><rect x="892.2" y="165" width="0.6" height="15.0" fill="rgb(236,71,4)" rx="2" ry="2" />
+<text  x="895.24" y="175.5" ></text>
+</g>
+<g >
+<title>query.unref_alias`hit20 (1 ms, 0.04%)</title><rect x="878.9" y="181" width="0.4" height="15.0" fill="rgb(230,59,34)" rx="2" ry="2" />
+<text  x="881.94" y="191.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (11 ms, 0.39%)</title><rect x="762.5" y="149" width="4.4" height="15.0" fill="rgb(246,203,46)" rx="2" ry="2" />
+<text  x="765.45" y="159.5" ></text>
+</g>
+<g >
+<title>query.update_join_types`hit10 (7 ms, 0.25%)</title><rect x="144.8" y="181" width="2.9" height="15.0" fill="rgb(249,181,21)" rx="2" ry="2" />
+<text  x="147.80" y="191.5" ></text>
+</g>
+<g >
+<title>query.table_alias`hit10 (0 ms, 0.00%)</title><rect x="121.3" y="133" width="0.1" height="15.0" fill="rgb(242,168,6)" rx="2" ry="2" />
+<text  x="124.28" y="143.5" ></text>
+</g>
+<g >
+<title>query.join_parent_model`hit30 (1 ms, 0.04%)</title><rect x="492.0" y="101" width="0.4" height="15.0" fill="rgb(227,215,28)" rx="2" ry="2" />
+<text  x="495.00" y="111.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="60.0" y="181" width="0.1" height="15.0" fill="rgb(208,60,7)" rx="2" ry="2" />
+<text  x="62.96" y="191.5" ></text>
+</g>
+<g >
+<title>query.setup_joins`hit10 (20 ms, 0.72%)</title><rect x="1144.4" y="165" width="8.3" height="15.0" fill="rgb(214,181,48)" rx="2" ry="2" />
+<text  x="1147.38" y="175.5" ></text>
+</g>
+<g >
+<title>query.promote_joins`hit10 (0 ms, 0.00%)</title><rect x="583.1" y="165" width="0.2" height="15.0" fill="rgb(245,72,41)" rx="2" ry="2" />
+<text  x="586.13" y="175.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (5 ms, 0.18%)</title><rect x="249.8" y="85" width="2.0" height="15.0" fill="rgb(235,150,47)" rx="2" ry="2" />
+<text  x="252.76" y="95.5" ></text>
+</g>
+<g >
+<title>compiler.get_from_clause`hit10 (6 ms, 0.22%)</title><rect x="825.1" y="181" width="2.7" height="15.0" fill="rgb(245,221,5)" rx="2" ry="2" />
+<text  x="828.11" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (1 ms, 0.04%)</title><rect x="572.0" y="165" width="0.2" height="15.0" fill="rgb(248,2,25)" rx="2" ry="2" />
+<text  x="575.01" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_extra_select`hit10 (0 ms, 0.00%)</title><rect x="1003.2" y="149" width="0.1" height="15.0" fill="rgb(206,188,46)" rx="2" ry="2" />
+<text  x="1006.15" y="159.5" ></text>
+</g>
+<g >
+<title>compiler.get_distinct`hit10 (3 ms, 0.11%)</title><rect x="823.9" y="181" width="1.2" height="15.0" fill="rgb(219,169,36)" rx="2" ry="2" />
+<text  x="826.95" y="191.5" ></text>
+</g>
+<g >
+<title>query.table_alias`hit10 (0 ms, 0.00%)</title><rect x="754.6" y="133" width="0.2" height="15.0" fill="rgb(244,97,25)" rx="2" ry="2" />
+<text  x="757.62" y="143.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (1 ms, 0.04%)</title><rect x="331.6" y="133" width="0.3" height="15.0" fill="rgb(247,186,28)" rx="2" ry="2" />
+<text  x="334.64" y="143.5" ></text>
+</g>
+<g >
+<title>compiler.execute_sql`hit10 (349 ms, 12.51%)</title><rect x="925.6" y="197" width="147.7" height="15.0" fill="rgb(227,53,33)" rx="2" ry="2" />
+<text  x="928.56" y="207.5" >compiler.execute_s..</text>
+</g>
+<g >
+<title>query.is_nullable`hit10 (1 ms, 0.04%)</title><rect x="749.4" y="149" width="0.3" height="15.0" fill="rgb(216,148,16)" rx="2" ry="2" />
+<text  x="752.38" y="159.5" ></text>
+</g>
+<g >
+<title>query.check_related_objects`hit10 (0 ms, 0.00%)</title><rect x="1139.6" y="165" width="0.1" height="15.0" fill="rgb(238,104,26)" rx="2" ry="2" />
+<text  x="1142.59" y="175.5" ></text>
+</g>
+<g >
+<title>query.trim_joins`hit10 (7 ms, 0.25%)</title><rect x="766.9" y="165" width="2.9" height="15.0" fill="rgb(228,100,40)" rx="2" ry="2" />
+<text  x="769.92" y="175.5" ></text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (35 ms, 1.25%)</title><rect x="188.4" y="181" width="14.9" height="15.0" fill="rgb(219,136,48)" rx="2" ry="2" />
+<text  x="191.37" y="191.5" ></text>
+</g>
+<g >
+<title>query.get_initial_alias`hit10 (10 ms, 0.36%)</title><rect x="1057.6" y="101" width="4.1" height="15.0" fill="rgb(207,156,54)" rx="2" ry="2" />
+<text  x="1060.59" y="111.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="105.7" y="117" width="0.2" height="15.0" fill="rgb(243,124,49)" rx="2" ry="2" />
+<text  x="108.68" y="127.5" ></text>
+</g>
+<g >
+<title>query.order_by`hit10 (17 ms, 0.61%)</title><rect x="584.1" y="245" width="7.1" height="15.0" fill="rgb(225,110,5)" rx="2" ry="2" />
+<text  x="587.08" y="255.5" ></text>
+</g>
+<g >
+<title>where._contains_aggregate`hit10 (5 ms, 0.18%)</title><rect x="1068.1" y="133" width="2.1" height="15.0" fill="rgb(248,83,40)" rx="2" ry="2" />
+<text  x="1071.13" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.__init__`hit10 (1 ms, 0.04%)</title><rect x="245.6" y="53" width="0.3" height="15.0" fill="rgb(228,17,1)" rx="2" ry="2" />
+<text  x="248.59" y="63.5" ></text>
+</g>
+<g >
+<title>query.filter`hit10 (153 ms, 5.48%)</title><rect x="1094.8" y="245" width="64.8" height="15.0" fill="rgb(244,117,7)" rx="2" ry="2" />
+<text  x="1097.79" y="255.5" >query.f..</text>
+</g>
+<g >
+<title>compiler.pre_sql_setup`hit10 (175 ms, 6.27%)</title><rect x="257.7" y="181" width="74.2" height="15.0" fill="rgb(240,96,42)" rx="2" ry="2" />
+<text  x="260.74" y="191.5" >compiler..</text>
+</g>
+<g >
+<title>expressions.get_lookup`hit10 (10 ms, 0.36%)</title><rect x="718.3" y="149" width="4.1" height="15.0" fill="rgb(252,89,8)" rx="2" ry="2" />
+<text  x="721.33" y="159.5" ></text>
+</g>
+<g >
+<title>query.get_compiler`hit10 (3 ms, 0.11%)</title><rect x="1093.3" y="197" width="1.2" height="15.0" fill="rgb(249,71,51)" rx="2" ry="2" />
+<text  x="1096.30" y="207.5" ></text>
+</g>
+<g >
+<title>related.get_path_info`hit10 (0 ms, 0.00%)</title><rect x="735.3" y="101" width="0.2" height="15.0" fill="rgb(227,62,22)" rx="2" ry="2" />
+<text  x="738.29" y="111.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (27 ms, 0.97%)</title><rect x="679.4" y="213" width="11.3" height="15.0" fill="rgb(213,5,21)" rx="2" ry="2" />
+<text  x="682.39" y="223.5" ></text>
+</g>
+<g >
+<title>query._not_support_combined_queries`hit10 (0 ms, 0.00%)</title><rect x="1159.4" y="229" width="0.2" height="15.0" fill="rgb(223,149,38)" rx="2" ry="2" />
+<text  x="1162.44" y="239.5" ></text>
+</g>
+<g >
+<title>lookups.process_rhs`hit10 (7 ms, 0.25%)</title><rect x="444.8" y="101" width="2.9" height="15.0" fill="rgb(217,218,52)" rx="2" ry="2" />
+<text  x="447.80" y="111.5" ></text>
+</g>
+<g >
+<title>query.resolve_lookup_value`hit10 (0 ms, 0.00%)</title><rect x="743.3" y="165" width="0.1" height="15.0" fill="rgb(205,113,15)" rx="2" ry="2" />
+<text  x="746.28" y="175.5" ></text>
+</g>
+<g >
+<title>compiler.get_default_columns`hit10 (29 ms, 1.04%)</title><rect x="480.0" y="117" width="12.4" height="15.0" fill="rgb(254,109,8)" rx="2" ry="2" />
+<text  x="483.00" y="127.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="766.6" y="133" width="0.1" height="15.0" fill="rgb(244,120,26)" rx="2" ry="2" />
+<text  x="769.60" y="143.5" ></text>
+</g>
+<g >
+<title>all (2,791 ms, 100%)</title><rect x="10.0" y="309" width="1180.0" height="15.0" fill="rgb(248,70,19)" rx="2" ry="2" />
+<text  x="13.00" y="319.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (6 ms, 0.22%)</title><rect x="436.8" y="69" width="2.4" height="15.0" fill="rgb(240,15,28)" rx="2" ry="2" />
+<text  x="439.81" y="79.5" ></text>
+</g>
+<g >
+<title>where.split_having`hit10 (4 ms, 0.14%)</title><rect x="874.8" y="165" width="1.6" height="15.0" fill="rgb(237,194,53)" rx="2" ry="2" />
+<text  x="877.76" y="175.5" ></text>
+</g>
+<g >
+<title>query.table_alias`hit10 (1 ms, 0.04%)</title><rect x="571.8" y="133" width="0.2" height="15.0" fill="rgb(251,12,54)" rx="2" ry="2" />
+<text  x="574.79" y="143.5" ></text>
+</g>
+<g >
+<title>options.get_field`hit10 (0 ms, 0.00%)</title><rect x="136.3" y="133" width="0.2" height="15.0" fill="rgb(220,210,12)" rx="2" ry="2" />
+<text  x="139.33" y="143.5" ></text>
+</g>
+<g >
+<title>query.names_to_path`hit10 (6 ms, 0.22%)</title><rect x="1154.7" y="149" width="2.4" height="15.0" fill="rgb(246,89,54)" rx="2" ry="2" />
+<text  x="1157.71" y="159.5" ></text>
+</g>
+<g >
+<title>query._not_support_combined_queries`hit10 (0 ms, 0.00%)</title><rect x="771.9" y="229" width="0.1" height="15.0" fill="rgb(253,114,7)" rx="2" ry="2" />
+<text  x="774.87" y="239.5" ></text>
+</g>
+<g >
+<title>query.add_q`hit10 (201 ms, 7.20%)</title><rect x="63.0" y="213" width="84.8" height="15.0" fill="rgb(226,186,26)" rx="2" ry="2" />
+<text  x="65.96" y="223.5" >query.add..</text>
+</g>
+<g >
+<title>compiler.cursor_iter`hit10 (3 ms, 0.11%)</title><rect x="876.4" y="197" width="1.1" height="15.0" fill="rgb(228,93,49)" rx="2" ry="2" />
+<text  x="879.38" y="207.5" ></text>
+</g>
+<g >
+<title>query.trim_joins`hit10 (4 ms, 0.14%)</title><rect x="142.9" y="165" width="1.9" height="15.0" fill="rgb(237,167,47)" rx="2" ry="2" />
+<text  x="145.94" y="175.5" ></text>
+</g>
+<g >
+<title>query.get_compiler`hit10 (4 ms, 0.14%)</title><rect x="364.0" y="213" width="1.5" height="15.0" fill="rgb(238,106,30)" rx="2" ry="2" />
+<text  x="366.97" y="223.5" ></text>
+</g>
+<g >
+<title>manager.__init__`hit10 (4 ms, 0.14%)</title><rect x="594.2" y="245" width="1.5" height="15.0" fill="rgb(242,220,41)" rx="2" ry="2" />
+<text  x="597.20" y="255.5" ></text>
+</g>
+<g >
+<title>compiler.setup_query`hit10 (150 ms, 5.38%)</title><rect x="1003.6" y="149" width="63.6" height="15.0" fill="rgb(238,82,25)" rx="2" ry="2" />
+<text  x="1006.57" y="159.5" >compil..</text>
+</g>
+<g >
+<title>query.demote_joins`hit10 (0 ms, 0.00%)</title><rect x="771.6" y="197" width="0.1" height="15.0" fill="rgb(218,144,3)" rx="2" ry="2" />
+<text  x="774.56" y="207.5" ></text>
+</g>
+<g >
+<title>lookups.get_db_prep_lookup`hit10 (4 ms, 0.14%)</title><rect x="446.2" y="69" width="1.5" height="15.0" fill="rgb(212,129,21)" rx="2" ry="2" />
+<text  x="449.17" y="79.5" ></text>
+</g>
+<g >
+<title>__init__.select_format`hit40 (1 ms, 0.04%)</title><rect x="328.9" y="117" width="0.6" height="15.0" fill="rgb(211,223,3)" rx="2" ry="2" />
+<text  x="331.93" y="127.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (309 ms, 11.07%)</title><rect x="774.8" y="229" width="130.8" height="15.0" fill="rgb(216,112,36)" rx="2" ry="2" />
+<text  x="777.82" y="239.5" >query.__iter__`h..</text>
+</g>
+<g >
+<title>related_descriptors.__set__`hit30 (1 ms, 0.04%)</title><rect x="905.1" y="197" width="0.5" height="15.0" fill="rgb(228,194,7)" rx="2" ry="2" />
+<text  x="908.14" y="207.5" ></text>
+</g>
+<g >
+<title>manager._set_creation_counter`hit10 (0 ms, 0.00%)</title><rect x="595.5" y="229" width="0.2" height="15.0" fill="rgb(208,148,11)" rx="2" ry="2" />
+<text  x="598.55" y="239.5" ></text>
+</g>
+<g >
+<title>query_utils.__init__`hit10 (0 ms, 0.00%)</title><rect x="147.8" y="213" width="0.2" height="15.0" fill="rgb(247,50,32)" rx="2" ry="2" />
+<text  x="150.80" y="223.5" ></text>
+</g>
+<g >
+<title>query.can_filter`hit10 (0 ms, 0.00%)</title><rect x="521.2" y="245" width="0.1" height="15.0" fill="rgb(236,146,17)" rx="2" ry="2" />
+<text  x="524.16" y="255.5" ></text>
+</g>
+<g >
+<title>datastructures.__init__`hit10 (3 ms, 0.11%)</title><rect x="748.3" y="149" width="1.1" height="15.0" fill="rgb(220,159,43)" rx="2" ry="2" />
+<text  x="751.26" y="159.5" ></text>
+</g>
+<g >
+<title>manager.all`hit20 (284 ms, 10.18%)</title><rect x="27.9" y="261" width="120.2" height="15.0" fill="rgb(220,220,51)" rx="2" ry="2" />
+<text  x="30.91" y="271.5" >manager.all`hi..</text>
+</g>
+<g >
+<title>related_lookups.as_sql`hit10 (44 ms, 1.58%)</title><rect x="805.2" y="133" width="18.7" height="15.0" fill="rgb(244,31,11)" rx="2" ry="2" />
+<text  x="808.20" y="143.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit30 (8 ms, 0.29%)</title><rect x="312.0" y="117" width="3.4" height="15.0" fill="rgb(220,176,32)" rx="2" ry="2" />
+<text  x="314.96" y="127.5" ></text>
+</g>
+<g >
+<title>__init__.get_col`hit10 (3 ms, 0.11%)</title><rect x="554.9" y="149" width="1.4" height="15.0" fill="rgb(236,144,40)" rx="2" ry="2" />
+<text  x="557.90" y="159.5" ></text>
+</g>
+<g >
+<title>related_lookups.get_prep_lookup`hit10 (32 ms, 1.15%)</title><rect x="94.4" y="133" width="13.5" height="15.0" fill="rgb(245,50,51)" rx="2" ry="2" />
+<text  x="97.39" y="143.5" ></text>
+</g>
+<g >
+<title>query._chain`hit10 (12 ms, 0.43%)</title><rect x="586.0" y="229" width="5.0" height="15.0" fill="rgb(211,182,31)" rx="2" ry="2" />
+<text  x="589.02" y="239.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (303 ms, 10.86%)</title><rect x="392.9" y="213" width="128.3" height="15.0" fill="rgb(213,95,24)" rx="2" ry="2" />
+<text  x="395.87" y="223.5" >query.__iter__`h..</text>
+</g>
+<g >
+<title>compiler.get_extra_select`hit10 (0 ms, 0.00%)</title><rect x="830.7" y="165" width="0.1" height="15.0" fill="rgb(253,206,32)" rx="2" ry="2" />
+<text  x="833.72" y="175.5" ></text>
+</g>
+<g >
+<title>4510-Thread-7 (1,405 ms, 50.35%)</title><rect x="595.9" y="293" width="594.1" height="15.0" fill="rgb(226,38,41)" rx="2" ry="2" />
+<text  x="598.91" y="303.5" >4510-Thread-7</text>
+</g>
+<g >
+<title>query.check_filterable`hit20 (1 ms, 0.04%)</title><rect x="565.3" y="165" width="0.4" height="15.0" fill="rgb(228,142,42)" rx="2" ry="2" />
+<text  x="568.26" y="175.5" ></text>
+</g>
+<g >
+<title>query_utils._get_lookup`hit10 (1 ms, 0.04%)</title><rect x="93.2" y="117" width="0.3" height="15.0" fill="rgb(229,10,33)" rx="2" ry="2" />
+<text  x="96.24" y="127.5" ></text>
+</g>
+<g >
+<title>related_lookups.get_normalized_value`hit10 (4 ms, 0.14%)</title><rect x="733.9" y="117" width="1.6" height="15.0" fill="rgb(210,138,42)" rx="2" ry="2" />
+<text  x="736.90" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.get_order_by`hit10 (0 ms, 0.00%)</title><rect x="1003.4" y="149" width="0.2" height="15.0" fill="rgb(217,219,47)" rx="2" ry="2" />
+<text  x="1006.42" y="159.5" ></text>
+</g>
+<g >
+<title>expressions.get_source_expressions`hit10 (0 ms, 0.00%)</title><rect x="815.5" y="53" width="0.1" height="15.0" fill="rgb(237,181,14)" rx="2" ry="2" />
+<text  x="818.50" y="63.5" ></text>
+</g>
+<g >
+<title>base.from_db`hit30 (30 ms, 1.08%)</title><rect x="784.4" y="213" width="12.8" height="15.0" fill="rgb(238,148,22)" rx="2" ry="2" />
+<text  x="787.37" y="223.5" ></text>
+</g>
+<g >
+<title>compiler.execute_sql`hit10 (194 ms, 6.95%)</title><rect x="797.2" y="213" width="82.1" height="15.0" fill="rgb(209,190,24)" rx="2" ry="2" />
+<text  x="800.24" y="223.5" >compiler...</text>
+</g>
+<g >
+<title>__init__.get_db_converters`hit10 (0 ms, 0.00%)</title><rect x="893.8" y="149" width="0.1" height="15.0" fill="rgb(216,108,12)" rx="2" ry="2" />
+<text  x="896.75" y="159.5" ></text>
+</g>
+<g >
+<title>query.join_parent_model`hit40 (1 ms, 0.04%)</title><rect x="318.4" y="117" width="0.6" height="15.0" fill="rgb(205,188,6)" rx="2" ry="2" />
+<text  x="321.45" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.quote_name_unless_alias`hit20 (1 ms, 0.04%)</title><rect x="813.0" y="37" width="0.3" height="15.0" fill="rgb(228,174,30)" rx="2" ry="2" />
+<text  x="815.99" y="47.5" ></text>
+</g>
+<g >
+<title>lookups.process_lhs`hit10 (59 ms, 2.11%)</title><rect x="223.4" y="101" width="24.8" height="15.0" fill="rgb(236,112,28)" rx="2" ry="2" />
+<text  x="226.39" y="111.5" >l..</text>
+</g>
+<g >
+<title>__init__.db_type_parameters`hit10 (0 ms, 0.00%)</title><rect x="435.1" y="69" width="0.2" height="15.0" fill="rgb(214,11,47)" rx="2" ry="2" />
+<text  x="438.07" y="79.5" ></text>
+</g>
+<g >
+<title>mixins.set_cached_value`hit30 (6 ms, 0.22%)</title><rect x="902.6" y="197" width="2.5" height="15.0" fill="rgb(205,129,13)" rx="2" ry="2" />
+<text  x="905.61" y="207.5" ></text>
+</g>
+<g >
+<title>mixins.is_cached`hit30 (10 ms, 0.36%)</title><rect x="359.7" y="213" width="4.3" height="15.0" fill="rgb(209,83,51)" rx="2" ry="2" />
+<text  x="362.72" y="223.5" ></text>
+</g>
+<g >
+<title>__init__.db_type_parameters`hit10 (0 ms, 0.00%)</title><rect x="247.9" y="37" width="0.1" height="15.0" fill="rgb(222,220,43)" rx="2" ry="2" />
+<text  x="250.86" y="47.5" ></text>
+</g>
+<g >
+<title>query.add_q`hit10 (124 ms, 4.44%)</title><rect x="1106.7" y="213" width="52.6" height="15.0" fill="rgb(232,75,11)" rx="2" ry="2" />
+<text  x="1109.72" y="223.5" >query..</text>
+</g>
+<g >
+<title>query_utils._get_lookup`hit10 (0 ms, 0.00%)</title><rect x="722.3" y="117" width="0.1" height="15.0" fill="rgb(234,150,37)" rx="2" ry="2" />
+<text  x="725.28" y="127.5" ></text>
+</g>
+<g >
+<title>compiler.pre_sql_setup`hit10 (115 ms, 4.12%)</title><rect x="827.8" y="181" width="48.6" height="15.0" fill="rgb(235,197,45)" rx="2" ry="2" />
+<text  x="830.82" y="191.5" >comp..</text>
+</g>
+<g >
+<title>expressions.__init__`hit10 (3 ms, 0.11%)</title><rect x="322.9" y="85" width="1.0" height="15.0" fill="rgb(221,150,42)" rx="2" ry="2" />
+<text  x="325.86" y="95.5" ></text>
+</g>
+<g >
+<title>query.__init__`hit20 (1 ms, 0.04%)</title><rect x="671.2" y="213" width="0.4" height="15.0" fill="rgb(234,47,37)" rx="2" ry="2" />
+<text  x="674.19" y="223.5" ></text>
+</g>
+<g >
+<title>query.get_meta`hit10 (0 ms, 0.00%)</title><rect x="743.1" y="165" width="0.2" height="15.0" fill="rgb(215,198,31)" rx="2" ry="2" />
+<text  x="746.13" y="175.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (5 ms, 0.18%)</title><rect x="741.0" y="149" width="2.1" height="15.0" fill="rgb(217,52,44)" rx="2" ry="2" />
+<text  x="744.03" y="159.5" ></text>
+</g>
+<g >
+<title>query.chain`hit10 (6 ms, 0.22%)</title><rect x="1104.1" y="181" width="2.6" height="15.0" fill="rgb(232,12,10)" rx="2" ry="2" />
+<text  x="1107.13" y="191.5" ></text>
+</g>
+<g >
+<title>query_utils.get_lookup`hit10 (6 ms, 0.22%)</title><rect x="720.1" y="133" width="2.3" height="15.0" fill="rgb(249,116,11)" rx="2" ry="2" />
+<text  x="723.07" y="143.5" ></text>
+</g>
+<g >
+<title>query.join`hit10 (10 ms, 0.36%)</title><rect x="129.6" y="149" width="4.1" height="15.0" fill="rgb(240,228,47)" rx="2" ry="2" />
+<text  x="132.60" y="159.5" ></text>
+</g>
+<g >
+<title>query.update_join_types`hit10 (5 ms, 0.18%)</title><rect x="581.2" y="181" width="2.1" height="15.0" fill="rgb(234,113,3)" rx="2" ry="2" />
+<text  x="584.15" y="191.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (49 ms, 1.76%)</title><rect x="803.4" y="181" width="20.5" height="15.0" fill="rgb(221,50,14)" rx="2" ry="2" />
+<text  x="806.41" y="191.5" ></text>
+</g>
+<g >
+<title>query.__iter__`hit10 (426 ms, 15.27%)</title><rect x="914.4" y="213" width="180.2" height="15.0" fill="rgb(239,45,10)" rx="2" ry="2" />
+<text  x="917.35" y="223.5" >query.__iter__`hit10</text>
+</g>
+<g >
+<title>query.__init__`hit10 (0 ms, 0.00%)</title><rect x="588.6" y="197" width="0.2" height="15.0" fill="rgb(205,46,48)" rx="2" ry="2" />
+<text  x="591.61" y="207.5" ></text>
+</g>
+<g >
+<title>compiler.compile`hit10 (46 ms, 1.65%)</title><rect x="804.5" y="149" width="19.4" height="15.0" fill="rgb(233,138,54)" rx="2" ry="2" />
+<text  x="807.53" y="159.5" ></text>
+</g>
+<g >
+<title>query.setup_joins`hit10 (38 ms, 1.36%)</title><rect x="743.4" y="165" width="16.3" height="15.0" fill="rgb(247,178,42)" rx="2" ry="2" />
+<text  x="746.43" y="175.5" ></text>
+</g>
+</g>
+</svg>
