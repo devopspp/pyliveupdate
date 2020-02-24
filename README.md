@@ -10,8 +10,7 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 # Key features (under developing)
 * Profile specific Python functions' (by function names or module names) call time.
 * Add / remove profilings without restart programs.
-* Add logs to specific functions.
-* Dynamic patching a function.
+* Show profiling results with call summary and flamegraphs.
 
 # Quick start
 
@@ -73,7 +72,8 @@ FP.revert(1)
 pylu-processlogs -i /tmp/pyliveupdate.log
 ```
 9. View the generated call summary and flamegraph
-### function call summary
+### Function call summary
+The following summary gives in process `4510` thread `5`, `views.results` was called `10` times and each time takes `139 ms`, `views.results` called `manager.all` for `20` times.
 ```
 4510-Thread-5
 function  hit  time/hit (ms)
@@ -84,7 +84,9 @@ views.results 10  138.562
       -query.__init__ 20  0.616
         -query.__init__ 20  0.071
 ```
-### flamegraph
+### Flamegraph
+![alt text](examples/pyliveupdate.log.svg)
+
 
 
 # Known Users
