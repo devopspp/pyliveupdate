@@ -93,4 +93,4 @@ views.results 10  138.562
 
 `*` means one-level nesting, `**` means any level of nesting. 
 # Known Users
-Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
+Welcome to register your company/organization name here: https://github.com/devopspp/pyliveupdate/issues/1
