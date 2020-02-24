@@ -1,34 +1,38 @@
 # pyliveupdate
-`PyLiveUpdate` is a Python runtime monitoring, profiling, debugging and bugfixing tool under development.
+`PyLiveUpdate` is a Python runtime monitoring, profiling, debugging and bugfixing tool.
 
 PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
-### Key features (under developing)
+# Demo
 
-* Profile specific (by name) Python functions call time.
-* Check the function invocation details such as function parameters, return object, local variables and etc.
-* Add logs to specific functions
-* Dynamic patching a function
+[![asciicast](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy.svg)](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy)
 
-### Quick start
+# Key features (under developing)
+* Profile specific Python functions' (by function names or module names) call time.
+* Add / remove profilings without restart programs.
+* Show profiling results with call summary and flamegraphs.
 
-#### Requirements
-* [bytecode](https://github.com/vstinner/bytecode)
+# Quick start
 
-#### Compatibility
-* Supports Python 3.6+ on Linux. 
+## Compatibility
+* Supports Python 3.5+ on Linux. 
 
-#### Install
+## Install
 
 ```
 pip install pyliveupdate
 ```
+or
+```
+git clone https://github.com/devopspp/pyliveupdate.git
+pip install -e pyliveupdate
+```
 
-### How to use
+## How to use
 We currently implemented function profiling and are implementing more.
 Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
 
-#### profile function call time
+## profile function call time
 
 1. Start pyliveupdate server
 ```
@@ -37,6 +41,7 @@ pylu-controller
 2. In your program (like examples/program1.py) main module add 
 ```	
 from pyliveupdate import *
+from pyliveupdatescripts import *
 UpdateStub().start()
 ```
 3. Run your program (make sure in the correct directory)
@@ -62,10 +67,27 @@ FP.ls()
 ```
 FP.revert(1)
 ```
+8. Process the logs to generate a summary and a flamegraph
+```
+pylu-processlogs -i /tmp/pyliveupdate.log
+```
+9. View the generated call summary and flamegraph
+### Function call summary
+The following summary gives in process `4510` thread `5`, `views.results` was called `10` times and each time takes `139 ms`, `views.results` called `manager.all` for `20` times.
+```
+4510-Thread-5
+function  hit  time/hit (ms)
+views.results 10  138.562
+  -manager.all 20  14.212
+    -__init__.__hash__ 10  0.035
+    -manager.get_queryset 20  0.922
+      -query.__init__ 20  0.616
+        -query.__init__ 20  0.071
+```
+### Flamegraph
+![alt text](examples/pyliveupdate.log.svg)
 
-### Known Users
+
+
+# Known Users
 Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
-
-### Credit
-#### Projects
-* [pyrasite](https://github.com/lmacken/pyrasite): Inject code into running Python processes.
