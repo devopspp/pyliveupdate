@@ -102,7 +102,7 @@ def main():
     outputsvg = inputname + '.svg'
     process_func_logs(args.inputfile, outputfolded, outputsummary)
     subprocess.call("flamegraph.pl --countname 'ms' {} > {}".format(outputfolded, outputsvg), shell=True)
-    print('generate summary: {} and: flamegraph {}'.format(outputsummary, outputsvg))
+    print('generate summary: {} and flamegraph: {}'.format(outputsummary, outputsvg))
     
 if __name__ == '__main__':
     main()

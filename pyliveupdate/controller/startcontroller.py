@@ -14,14 +14,18 @@ def main():
                         help='the controller listening port (default: 50050)')
     args = parser.parse_args()
     
+    logprocess = None
     if args.logserver:
-        multiprocessing.Process(target=start_logger).start()
+        logprocess = multiprocessing.Process(target=start_logger)
+        logprocess.start()
     
 #     startpayloads = ['exec("from pyliveupdatescripts import *")']  
 #     if args.attachscript:
 #         startpayloads.append(r"exec(r'''{}''')".format(open(args.attachscript).read()))
 
     UpdateController(args.port).start()
+    if logprocess:
+        logprocess.terminate()
     
 if __name__ == '__main__':
     main()

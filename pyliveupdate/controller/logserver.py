@@ -56,8 +56,8 @@ def start_logger(host='localhost',
     #     - %(pathname)s - %(module)s - %(funcName)s - %(lineno)s\n\
     #     - %(message)s\n''')
     f_format =logging.Formatter(
-        '%(asctime)s; %(processName)s; %(process)s; %(threadName)s; %(thread)d; '+\
-        '%(pathname)s; %(lineno)s; %(module)s; %(funcName)s; %(message)s')
+        '%(asctime)s; %(processName)s; %(process)d; %(threadName)s; %(thread)d; '+\
+        '%(pathname)s; %(lineno)d; %(module)s; %(funcName)s; %(message)s')
     f_handler.setFormatter(f_format)
     logger.setLevel(logging.INFO)
     logger.addHandler(f_handler)

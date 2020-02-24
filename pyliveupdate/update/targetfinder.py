@@ -2,7 +2,7 @@ import inspect, sys, time
 from bytecode import UNSET, Label, Instr, Bytecode, BasicBlock, ControlFlowGraph
 import copy, types, os
 import pathlib
-import logging
+import logging, collections
 
 logger = logging.getLogger(__name__)
 
@@ -12,13 +12,16 @@ class TargetFilter(object):
         '''
         check if an obj is in an module under the target directory
         '''
+#         if inspect.ismethod(obj) \
+#             or inspect.isfunction(obj):
+#             return True
+       
         objmod = obj
         if inspect.isclass(obj) or inspect.ismethod(obj) \
             or inspect.isfunction(obj):
             
             if obj.__module__ in sys.modules:
                 objmod = sys.modules[obj.__module__]
-            
         elif inspect.ismodule(obj):
             objmod = obj
         else:
@@ -66,7 +69,7 @@ class TargetFinder(object):
                     
     @classmethod
     def _find_target_rec(cls, target_path, target_fpath, name_candidates, handled_candidates):
-        result = []
+        result = set()
         new_candidates = []
         if len(target_path) <= 0 or len(name_candidates) <= 0:
             return result
@@ -80,21 +83,29 @@ class TargetFinder(object):
                 if id(candidate) not in handled_candidates\
                     and TargetFilter.filter_target(name, candidate, target_fpath):
                     handled_candidates.add(id(candidate))
-                    for new_name, new_candidate in cls._getmembers(candidate, name):
-                        new_candidates.append((new_name, new_candidate))
+                    if not inspect.ismethod(candidate) and not inspect.isfunction(candidate):
+                        for new_name, new_candidate in cls._getmembers(candidate, name):
+                            new_candidates.append((new_name, new_candidate))
                         
-                    if len(target_path) == 1:
-                        result.append(candidate)
+                    if len(target_path) == 1 and isinstance(candidate, collections.Hashable):
+                        try:    
+                            result.add(candidate)
+                        except:
+                            pass
             if p == '**':
                 new_target_path = ['**']
         else:
             for name, candidate in name_candidates:
                 if p == name:
-                    for new_name, new_candidate in cls._getmembers(candidate, name):
-                        new_candidates.append((new_name, new_candidate))
-                    if len(target_path) == 1:
-                        result.append(candidate)
-        result.extend(
+                    if not inspect.ismethod(candidate) and not inspect.isfunction(candidate):
+                        for new_name, new_candidate in cls._getmembers(candidate, name):
+                            new_candidates.append((new_name, new_candidate))
+                    if len(target_path) == 1 and isinstance(candidate, collections.Hashable):
+                        try:
+                            result.add(candidate)
+                        except:
+                            pass
+        result.update(
             TargetFinder._find_target_rec(
                 new_target_path, target_fpath, new_candidates, handled_candidates))
         return result
@@ -171,7 +182,7 @@ class TargetFinder(object):
         '''
         modules = sys.modules
         path = target_name.split('.')
-        result = []
+        result = set()
         
         if len(path) <= 0:
             return result
@@ -193,7 +204,7 @@ class TargetFinder(object):
                 return result
 
             if path == []:
-                result.append(target_module)
+                result.add(target_module)
                 return result
 
             target_filepath = cls._get_module_path(target_module)
@@ -202,7 +213,7 @@ class TargetFinder(object):
         for target_module in target_modules:
             #print(target_module.__name__)
             name_candidates = cls._getmembers(target_module, target_module.__name__)
-            result.extend(TargetFinder._find_target_rec(path, target_filepath, name_candidates, set()))
-        return list(set(result))
+            result.update(TargetFinder._find_target_rec(path, target_filepath, name_candidates, set()))
+        return result
     
     

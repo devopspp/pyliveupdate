@@ -1,0 +1,17 @@
+7059-Thread-11
+function  hit  time/hit (ms)
+views.index 65  3.337
+  -views.index 30  3.232
+
+7059-Thread-9
+function  hit  time/hit (ms)
+views.detail 30  5.022
+
+7059-Thread-7
+function  hit  time/hit (ms)
+views.vote 30  5.274
+
+7059-Thread-5
+function  hit  time/hit (ms)
+views.results 29  4.481
+

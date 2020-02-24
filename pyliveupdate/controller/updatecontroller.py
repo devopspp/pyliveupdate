@@ -59,11 +59,13 @@ class UpdateController(object):
                 expression = str(input(prompt))
                 if expression == '' or expression.startswith('#'):
                     continue
+                if expression in ['exit', 'exit()', 'quit', 'quit()']:
+                    break
                 request = updatestub_pb2.SendEvalRequest(expression=expression)
 
                 for address, stub in self.stubregister.address_stubs.items(): 
                     try:
-                        response = stub.send_eval.future(request, timeout=10)
+                        response = stub.send_eval.future(request, timeout=30)
                         response.add_done_callback(self.get_response_handler(address))
                         self.waitingtasks.append(response)
                     except Exception as e:
@@ -73,17 +75,20 @@ class UpdateController(object):
             except Exception as e:
                 print(e)
                 sys.exit()
-        registerserver.wait_for_termination()
+        #registerserver.wait_for_termination()
         
     def get_response_handler(self, address):
         def handle_response(response_future):
             self.waitingtasks.remove(response_future)
             response = response_future.result()
+            result = response.result
+            if not result.endswith('\n'):
+                result = result+'\n'
             if response.returncode == 0:
-                print('{}: {}'.format(address, response.result), 
+                print('{}: {}'.format(address, result), 
                       end='', flush=True)
             else:
-                print("{} eval error: {}".format(address, response.result), 
+                print("{} eval error: {}".format(address, result), 
                       end='', flush=True)
         return handle_response
 if __name__ == '__main__':
