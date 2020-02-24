@@ -32,7 +32,7 @@ pip install -e pyliveupdate
 We currently implemented function profiling and are implementing more.
 Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
 
-## profile function call time
+### profile function call time
 
 1. Start pyliveupdate server
 ```
@@ -58,7 +58,6 @@ any functions
 ```
 FP.profile('**')
 ```
-5. Check output in either your program output or `/tmp/pyliveupdate.log`
 6. List applied profiling
 ```
 FP.ls()
@@ -72,7 +71,7 @@ FP.revert(1)
 pylu-processlogs -i /tmp/pyliveupdate.log
 ```
 9. View the generated call summary and flamegraph
-### Function call summary
+#### Function call summary
 The following summary gives in process `4510` thread `5`, `views.results` was called `10` times and each time takes `139 ms`, `views.results` called `manager.all` for `20` times.
 ```
 4510-Thread-5
@@ -84,10 +83,14 @@ views.results 10  138.562
       -query.__init__ 20  0.616
         -query.__init__ 20  0.071
 ```
-### Flamegraph
+#### Flamegraph
 ![alt text](examples/pyliveupdate.log.svg)
 
+### Profiling scope
+  1. One specific function: `module1.class1.func1`
+  2. All functions in a class: `module1.class1.*`
+  3. All functions in a module: `module1.**`
 
-
+`*` means one-level nesting, `**` means any level of nesting. 
 # Known Users
 Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
