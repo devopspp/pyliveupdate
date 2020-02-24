@@ -3,22 +3,22 @@
 
 PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
-### Demo
-[![asciicast](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy)
+# Demo
 
-### Key features (under developing)
+[![asciicast](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy.svg)](https://asciinema.org/a/yBJ24GinkhK3bizbVE1tGLFhy)
 
-* Profile specific Python functions (by function names or module names) call time.
-* Check the function invocation details such as function parameters, return object, local variables and etc.
-* Add logs to specific functions
-* Dynamic patching a function
+# Key features (under developing)
+* Profile specific Python functions' (by function names or module names) call time.
+* Add / remove profilings without restart programs.
+* Add logs to specific functions.
+* Dynamic patching a function.
 
-### Quick start
+# Quick start
 
-#### Compatibility
+## Compatibility
 * Supports Python 3.5+ on Linux. 
 
-#### Install
+## Install
 
 ```
 pip install pyliveupdate
@@ -29,11 +29,11 @@ git clone https://github.com/devopspp/pyliveupdate.git
 pip install -e pyliveupdate
 ```
 
-### How to use
+## How to use
 We currently implemented function profiling and are implementing more.
 Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
 
-#### profile function call time
+## profile function call time
 
 1. Start pyliveupdate server
 ```
@@ -73,7 +73,19 @@ FP.revert(1)
 pylu-processlogs -i /tmp/pyliveupdate.log
 ```
 9. View the generated call summary and flamegraph
+### function call summary
+```
+4510-Thread-5
+function  hit  time/hit (ms)
+views.results 10  138.562
+  -manager.all 20  14.212
+    -__init__.__hash__ 10  0.035
+    -manager.get_queryset 20  0.922
+      -query.__init__ 20  0.616
+        -query.__init__ 20  0.071
+```
+### flamegraph
 
 
-### Known Users
+# Known Users
 Welcome to register your company name here: https://github.com/devopspp/pyliveupdate/issues/1
