@@ -40,8 +40,8 @@ pylu-controller -l
 ```
 2. In your program (like examples/program1.py) main module add 
 ```	
-from pyliveupdate import *
-from pyliveupdatescripts import *
+from pyliveupdate import UpdateStub
+from pyliveupdatescripts import FP
 UpdateStub().start()
 ```
 3. Run your program (make sure in the correct directory)
