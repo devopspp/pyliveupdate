@@ -11,7 +11,7 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 * Profile specific Python functions' (by function names or module names) call time.
 * Add / remove profilings without restart programs.
 * Show profiling results with call summary and flamegraphs.
-* More features are under developing. (Let use know what features you want: https://github.com/devopspp/pyliveupdate/issues/2)
+* More features are under developing. (Let us know what features you want: https://github.com/devopspp/pyliveupdate/issues/2)
 
 
 # Quick start
