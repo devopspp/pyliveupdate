@@ -5,7 +5,7 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 
 # Demo
 
-[![asciicast](https://asciinema.org/a/304462.svg)](https://asciinema.org/a/304462)
+[![asciicast](https://asciinema.org/a/304465.svg)](https://asciinema.org/a/304465)
 
 # Key features (under developing)
 * Profile specific Python functions' (by function names or module names) call time.
