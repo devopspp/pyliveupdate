@@ -1,5 +1,5 @@
 # pyliveupdate
-`PyLiveUpdate` is a Python runtime monitoring, profiling, debugging and bugfixing tool.
+`PyLiveUpdate` is a Python runtime profiling, debugging and bugfixing tool.
 
 PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
 
@@ -7,10 +7,12 @@ PyLiveUpdate allows developers to profile, troubleshoot and fix production issue
 
 [![asciicast](https://asciinema.org/a/304465.svg)](https://asciinema.org/a/304465)
 
-# Key features (under developing)
+# Key features
 * Profile specific Python functions' (by function names or module names) call time.
 * Add / remove profilings without restart programs.
 * Show profiling results with call summary and flamegraphs.
+* More features are under developing. (Let use know what features you want: https://github.com/devopspp/pyliveupdate/issues/2)
+
 
 # Quick start
 
