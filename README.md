@@ -1,7 +1,7 @@
 # pyliveupdate
-`PyLiveUpdate` is a Python runtime profiling, debugging and bugfixing tool.
+`PyLiveUpdate` is a dynamic code manipulation (e.g. bytecode instrumentation) framework for profiling, debugging and bugfixing Python programs.
 
-PyLiveUpdate allows developers to profile, troubleshoot and fix production issues for Python applications without restarting the programs.
+PyLiveUpdate allows developers to profile, diagnose and fix production issues for Python programs without restarting the programs.
 
 # Demo
 
