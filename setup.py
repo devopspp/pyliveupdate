@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyliveupdate", 
-    version="0.2.2",
+    version="0.2.6",
     author="devopspp",
     keywords='runtime instrumentation logging profiling debugging',
     description="A tool to manipulate python code at runtime for logging, profiling, debugging, etc.",
@@ -17,6 +17,10 @@ setuptools.setup(
     python_requires='>=3.5',
     install_requires=[
         'bytecode',
+        'Werkzeug',
+        'grpcio',
+        'grpcio-tools',
+        'aenum'
       ],
     entry_points="""
           [console_scripts]
