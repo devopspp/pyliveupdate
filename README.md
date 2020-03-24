@@ -11,7 +11,7 @@ pip install pyliveupdate
 ```
 
 # How to use
-Put these two lines of code in your server program and run it
+Put these two lines of code in your server program and run it. Try it out with `example/program1.py`. 
 ```
 from pyliveupdatescripts import UpdateStub
 UpdateStub().start()
