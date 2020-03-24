@@ -34,7 +34,7 @@ You can also define your own customized modifications.
 There are in general two kinds of modification: instrument and redefine.
 You can define them as following and apply with `patch('patch.py')`.
 
-## Instrument code into existing functions
+#### Instrument code into existing functions
 ```
 from pyliveupdate.update import Instrument, UpdateManager
 def _line_after(a):
@@ -44,7 +44,7 @@ update = Instrument('__main__.bar',
 UpdateManager.apply_update(update)
 ```
 The code injects a `print(a)` in line 12 and 14 in function `__main__.bar`.
-## Redefine (patch) existing functions
+#### Redefine (patch) existing functions
 ```
 from pyliveupdate.update import Instrument, UpdateManager
 def new_bar(a):
