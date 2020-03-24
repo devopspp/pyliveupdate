@@ -1,99 +1,38 @@
 # pyliveupdate
-`PyLiveUpdate` is a runtime python bytecode manipulation (e.g. bytecode instrumentation) framework for profiling, debugging and bugfixing Python programs.
+`PyLiveUpdate` is tool to help you modify your running python code without stopping it.
+It is useful for modifying long-running server programs in production with zero downtime.
+Some modification scenario includes: inject code to profile the runtime of certain lines of code;
+inject code to print out a variable for debugging; apply a patch without restarting.
 
-PyLiveUpdate allows developers to profile, diagnose and fix production issues for Python programs without restarting the programs.
-
-# Demo
-
-[![asciicast](https://asciinema.org/a/304465.svg)](https://asciinema.org/a/304465)
-
-# Key features
-* Profile specific Python functions' (by function names or module names) call time.
-* Add / remove profilings without restart programs.
-* Support profiling multiple processes / threads.
-* Show profiling results with call summary and flamegraphs.
-* More features are under developing. (Let us know what features you want: https://github.com/devopspp/pyliveupdate/issues/2)
-
-
-# Quick start
-
-## Compatibility
-* Supports Python 3.5+ on Linux. 
-
-## Install
+# Install
 
 ```
 pip install pyliveupdate
 ```
-or
-```
-git clone https://github.com/devopspp/pyliveupdate.git
-pip install -e pyliveupdate
-```
 
-## How to use
-We currently implemented function profiling and are implementing more.
-Please feel free to let us know if you find other features useful: https://github.com/devopspp/pyliveupdate/issues/2.
-
-### profile function call time
-
-1. Start pyliveupdate server
+# How to use
+Put these two lines of code in your server program and run it
 ```
-pylu-controller -l
-```
-2. In your program (like examples/program1.py) main module add 
-```	
-from pyliveupdate import UpdateStub
-from pyliveupdatescripts import FP
+from pyliveupdatescripts import UpdateStub
 UpdateStub().start()
 ```
-3. Run your program (make sure in the correct directory)
+Start a controller to modify it!
 ```
-cd examples
-python program1.py
+> pylu-controller -l 127.0.0.1:50050
 ```
-4. Start profile a set of functions
+Some predefined modification available in the controller
 ```
-FP.profile(['__main__.**', 'module1.**'])
+> FuncProfiler.profile('__main__.bar') # inject the time profiling code into a function __main__.bar
+> LineProfiler.profile('__main__.bar', [11, 12]) # inject time profiling code into certain lines
+> FuncDebugger.debug('__main__.bar') # inject code to print out function parameter and return value
+> LineDebugger.debug('__main__.bar', [11, 12]) # inject code to print out variables in certain lines
+> VarDebugger.debug('__main__.bar', 'b') # inject code to print out all values of a variable in different statements
 ```
-or
-any functions
-```
-FP.profile('**')
-```
-6. List applied profiling
-```
-FP.ls()
-```
-7. Stop a profiling by its id without stopping your program
-```
-FP.revert(1)
-```
-8. Process the logs to generate a summary and a flamegraph
-```
-pylu-processlogs -i /tmp/pyliveupdate.log
-```
-9. View the generated call summary and flamegraph
-#### Function call summary
-The following summary gives in process `4510` thread `5`, `views.results` was called `10` times and each time takes `139 ms`, `views.results` called `manager.all` for `20` times.
-```
-4510-Thread-5
-function  hit  time/hit (ms)
-views.results 10  138.562
-  -manager.all 20  14.212
-    -__init__.__hash__ 10  0.035
-    -manager.get_queryset 20  0.922
-      -query.__init__ 20  0.616
-        -query.__init__ 20  0.071
-```
-#### Flamegraph
-![alt text](examples/pyliveupdate.log.svg)
+You can also use wildcard to match many, `*` means one-level nesting, `**` means any level of nesting. 
+# Customized modification
 
-### Profiling scope
-  1. One specific function: `module1.class1.func1`
-  2. All functions in a class: `module1.class1.*`
-  3. All functions in a module: `module1.**`
+## Instrument code into existing functions
 
-`*` means one-level nesting, `**` means any level of nesting. 
-# Known Users
-Welcome to register your company/organization name here: https://github.com/devopspp/pyliveupdate/issues/1
+## Redefine (patch) existing functions
+
+
