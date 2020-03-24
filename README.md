@@ -37,8 +37,10 @@ You can define them as following and apply with `patch('patch.py')`.
 #### Instrument code into existing functions
 ```
 from pyliveupdate.update import Instrument, UpdateManager
+
 def _line_after(a):
     print(a)
+    
 update = Instrument('__main__.bar', 
                     {('line_after', [12, 14]): _line_after})
 UpdateManager.apply_update(update)
@@ -47,8 +49,10 @@ The code injects a `print(a)` in line 12 and 14 in function `__main__.bar`.
 #### Redefine (patch) existing functions
 ```
 from pyliveupdate.update import Instrument, UpdateManager
+
 def new_bar(a):
     print('new_bar', a)
+    
 update = Redefine('__main__', None, {'__main__.bar':new_bar})
 UpdateManager.apply_update(update)
 ```
