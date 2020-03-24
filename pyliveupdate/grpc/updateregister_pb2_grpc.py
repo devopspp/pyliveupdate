@@ -14,10 +14,10 @@ class StubRegisterStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.send_register = channel.unary_unary(
-        '/updateregister.StubRegister/send_register',
-        request_serializer=updateregister__pb2.SendRegisterRequest.SerializeToString,
-        response_deserializer=updateregister__pb2.SendRegisterResponse.FromString,
+    self.register = channel.unary_unary(
+        '/updateregister.StubRegister/register',
+        request_serializer=updateregister__pb2.RegisterRequest.SerializeToString,
+        response_deserializer=updateregister__pb2.RegisterResponse.FromString,
         )
 
 
@@ -25,7 +25,7 @@ class StubRegisterServicer(object):
   # missing associated documentation comment in .proto file
   pass
 
-  def send_register(self, request, context):
+  def register(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -35,10 +35,10 @@ class StubRegisterServicer(object):
 
 def add_StubRegisterServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'send_register': grpc.unary_unary_rpc_method_handler(
-          servicer.send_register,
-          request_deserializer=updateregister__pb2.SendRegisterRequest.FromString,
-          response_serializer=updateregister__pb2.SendRegisterResponse.SerializeToString,
+      'register': grpc.unary_unary_rpc_method_handler(
+          servicer.register,
+          request_deserializer=updateregister__pb2.RegisterRequest.FromString,
+          response_serializer=updateregister__pb2.RegisterResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

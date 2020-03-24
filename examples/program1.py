@@ -1,14 +1,18 @@
 import os, sys, time
-#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 ## add these two lines to your own code
-from pyliveupdate import *
+#from pyliveupdate import *
+from pyliveupdatescripts import UpdateStub
 UpdateStub().start()
 
 from module1 import *
 
 def bar(a):
-    print('bar', a)
+    foo(a)
+    b = a
+    print('bar1', a)
+    print('bar2', a)
+    print('bar3', a)
 
 class Foo:
     def print_object(self, a):
@@ -22,12 +26,15 @@ class Foo:
     def print_static(a):
         print('Foo.print_static ', a)
 
+def main():
+    print(time.time())
+    time.sleep(1)
+    foo(1)
+    bar(2)
+    Foo().print_object(3)
+    Foo.print_class(4)
+    Foo.print_static(5)
     
 if __name__ == '__main__':
     while True:
-        time.sleep(1)
-        foo(1)
-        bar(2)
-        Foo().print_object(3)
-        Foo.print_class(4)
-        Foo.print_static(5)
+        main()

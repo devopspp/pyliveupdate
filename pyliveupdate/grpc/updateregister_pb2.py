@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='updateregister',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x14updateregister.proto\x12\x0eupdateregister\"/\n\x13SendRegisterRequest\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04port\x18\x02 \x01(\t\"F\n\x14SendRegisterResponse\x12.\n\nreturncode\x18\x02 \x01(\x0e\x32\x1a.updateregister.ReturnCode*&\n\nReturnCode\x12\x0b\n\x07SUCCESS\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x32l\n\x0cStubRegister\x12\\\n\rsend_register\x12#.updateregister.SendRegisterRequest\x1a$.updateregister.SendRegisterResponse\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n\x14updateregister.proto\x12\x0eupdateregister\"+\n\x0fRegisterRequest\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04port\x18\x02 \x01(\t\"B\n\x10RegisterResponse\x12.\n\nreturncode\x18\x01 \x01(\x0e\x32\x1a.updateregister.ReturnCode*&\n\nReturnCode\x12\x0b\n\x07SUCCESS\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x32_\n\x0cStubRegister\x12O\n\x08register\x12\x1f.updateregister.RegisterRequest\x1a .updateregister.RegisterResponse\"\x00\x62\x06proto3')
 )
 
 _RETURNCODE = _descriptor.EnumDescriptor(
@@ -41,8 +41,8 @@ _RETURNCODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=161,
-  serialized_end=199,
+  serialized_start=153,
+  serialized_end=191,
 )
 _sym_db.RegisterEnumDescriptor(_RETURNCODE)
 
@@ -52,22 +52,22 @@ FAILURE = 1
 
 
 
-_SENDREGISTERREQUEST = _descriptor.Descriptor(
-  name='SendRegisterRequest',
-  full_name='updateregister.SendRegisterRequest',
+_REGISTERREQUEST = _descriptor.Descriptor(
+  name='RegisterRequest',
+  full_name='updateregister.RegisterRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='ip', full_name='updateregister.SendRegisterRequest.ip', index=0,
+      name='ip', full_name='updateregister.RegisterRequest.ip', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='port', full_name='updateregister.SendRegisterRequest.port', index=1,
+      name='port', full_name='updateregister.RegisterRequest.port', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -86,20 +86,20 @@ _SENDREGISTERREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=40,
-  serialized_end=87,
+  serialized_end=83,
 )
 
 
-_SENDREGISTERRESPONSE = _descriptor.Descriptor(
-  name='SendRegisterResponse',
-  full_name='updateregister.SendRegisterResponse',
+_REGISTERRESPONSE = _descriptor.Descriptor(
+  name='RegisterResponse',
+  full_name='updateregister.RegisterResponse',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='returncode', full_name='updateregister.SendRegisterResponse.returncode', index=0,
-      number=2, type=14, cpp_type=8, label=1,
+      name='returncode', full_name='updateregister.RegisterResponse.returncode', index=0,
+      number=1, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -116,29 +116,29 @@ _SENDREGISTERRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=89,
-  serialized_end=159,
+  serialized_start=85,
+  serialized_end=151,
 )
 
-_SENDREGISTERRESPONSE.fields_by_name['returncode'].enum_type = _RETURNCODE
-DESCRIPTOR.message_types_by_name['SendRegisterRequest'] = _SENDREGISTERREQUEST
-DESCRIPTOR.message_types_by_name['SendRegisterResponse'] = _SENDREGISTERRESPONSE
+_REGISTERRESPONSE.fields_by_name['returncode'].enum_type = _RETURNCODE
+DESCRIPTOR.message_types_by_name['RegisterRequest'] = _REGISTERREQUEST
+DESCRIPTOR.message_types_by_name['RegisterResponse'] = _REGISTERRESPONSE
 DESCRIPTOR.enum_types_by_name['ReturnCode'] = _RETURNCODE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-SendRegisterRequest = _reflection.GeneratedProtocolMessageType('SendRegisterRequest', (_message.Message,), {
-  'DESCRIPTOR' : _SENDREGISTERREQUEST,
+RegisterRequest = _reflection.GeneratedProtocolMessageType('RegisterRequest', (_message.Message,), {
+  'DESCRIPTOR' : _REGISTERREQUEST,
   '__module__' : 'updateregister_pb2'
-  # @@protoc_insertion_point(class_scope:updateregister.SendRegisterRequest)
+  # @@protoc_insertion_point(class_scope:updateregister.RegisterRequest)
   })
-_sym_db.RegisterMessage(SendRegisterRequest)
+_sym_db.RegisterMessage(RegisterRequest)
 
-SendRegisterResponse = _reflection.GeneratedProtocolMessageType('SendRegisterResponse', (_message.Message,), {
-  'DESCRIPTOR' : _SENDREGISTERRESPONSE,
+RegisterResponse = _reflection.GeneratedProtocolMessageType('RegisterResponse', (_message.Message,), {
+  'DESCRIPTOR' : _REGISTERRESPONSE,
   '__module__' : 'updateregister_pb2'
-  # @@protoc_insertion_point(class_scope:updateregister.SendRegisterResponse)
+  # @@protoc_insertion_point(class_scope:updateregister.RegisterResponse)
   })
-_sym_db.RegisterMessage(SendRegisterResponse)
+_sym_db.RegisterMessage(RegisterResponse)
 
 
 
@@ -148,16 +148,16 @@ _STUBREGISTER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=201,
-  serialized_end=309,
+  serialized_start=193,
+  serialized_end=288,
   methods=[
   _descriptor.MethodDescriptor(
-    name='send_register',
-    full_name='updateregister.StubRegister.send_register',
+    name='register',
+    full_name='updateregister.StubRegister.register',
     index=0,
     containing_service=None,
-    input_type=_SENDREGISTERREQUEST,
-    output_type=_SENDREGISTERRESPONSE,
+    input_type=_REGISTERREQUEST,
+    output_type=_REGISTERRESPONSE,
     serialized_options=None,
   ),
 ])

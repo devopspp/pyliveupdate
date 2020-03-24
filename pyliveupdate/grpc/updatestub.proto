@@ -3,7 +3,8 @@ syntax = "proto3";
 package updatestub;
 
 service RemoteEval {
-    rpc send_eval(SendEvalRequest) returns (SendEvalResponse) {}
+    rpc eval_(EvalRequest) returns (EvalResponse) {}
+    rpc ping(PingRequest) returns (PingResponse) {}
 }
 
 enum ReturnCode {
@@ -11,11 +12,19 @@ enum ReturnCode {
     FAILURE = 1;
 }
 
-message SendEvalRequest {
+message EvalRequest {
     string expression = 1;
 }
 
-message SendEvalResponse {
+message EvalResponse {
+    string result = 1;
+    ReturnCode returncode = 2;
+}
+
+message PingRequest{
+}
+
+message PingResponse{
     string result = 1;
     ReturnCode returncode = 2;
 }

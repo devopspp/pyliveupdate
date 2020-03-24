@@ -14,10 +14,15 @@ class RemoteEvalStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.send_eval = channel.unary_unary(
-        '/updatestub.RemoteEval/send_eval',
-        request_serializer=updatestub__pb2.SendEvalRequest.SerializeToString,
-        response_deserializer=updatestub__pb2.SendEvalResponse.FromString,
+    self.eval_ = channel.unary_unary(
+        '/updatestub.RemoteEval/eval_',
+        request_serializer=updatestub__pb2.EvalRequest.SerializeToString,
+        response_deserializer=updatestub__pb2.EvalResponse.FromString,
+        )
+    self.ping = channel.unary_unary(
+        '/updatestub.RemoteEval/ping',
+        request_serializer=updatestub__pb2.PingRequest.SerializeToString,
+        response_deserializer=updatestub__pb2.PingResponse.FromString,
         )
 
 
@@ -25,7 +30,14 @@ class RemoteEvalServicer(object):
   # missing associated documentation comment in .proto file
   pass
 
-  def send_eval(self, request, context):
+  def eval_(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def ping(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -35,10 +47,15 @@ class RemoteEvalServicer(object):
 
 def add_RemoteEvalServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'send_eval': grpc.unary_unary_rpc_method_handler(
-          servicer.send_eval,
-          request_deserializer=updatestub__pb2.SendEvalRequest.FromString,
-          response_serializer=updatestub__pb2.SendEvalResponse.SerializeToString,
+      'eval_': grpc.unary_unary_rpc_method_handler(
+          servicer.eval_,
+          request_deserializer=updatestub__pb2.EvalRequest.FromString,
+          response_serializer=updatestub__pb2.EvalResponse.SerializeToString,
+      ),
+      'ping': grpc.unary_unary_rpc_method_handler(
+          servicer.ping,
+          request_deserializer=updatestub__pb2.PingRequest.FromString,
+          response_serializer=updatestub__pb2.PingResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

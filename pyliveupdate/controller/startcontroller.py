@@ -1,29 +1,29 @@
-from pyliveupdate.controller import UpdateController, start_logger
+from pyliveupdate.controller import UpdateController, start_log_server
 import argparse, multiprocessing, os
-# from pyliveupdatescripts import *
-
+from pyliveupdate.config import CONTROLLER_IP, CONTROLLER_PORT
 
 def main():
     parser = argparse.ArgumentParser(description='Update server')
     parser.add_argument('-l', '--logserver', 
                         help='start log server to accept logs from client',
                         action="store_true")
-#     parser.add_argument('--attachscript', type=str, 
-#                         help='an update script to attach to the target program')
-    parser.add_argument('-p', '--port', type=int, default=50050,
-                        help='the controller listening port (default: 50050)')
+    parser.add_argument('targets', type=str,
+          help='target addresses separated with ";", example: 127.0.0.1:50050;127.0.0.2:50050')
     args = parser.parse_args()
     
     logprocess = None
     if args.logserver:
-        logprocess = multiprocessing.Process(target=start_logger)
+        logprocess = multiprocessing.Process(target=start_log_server)
         logprocess.start()
     
 #     startpayloads = ['exec("from pyliveupdatescripts import *")']  
 #     if args.attachscript:
 #         startpayloads.append(r"exec(r'''{}''')".format(open(args.attachscript).read()))
-
-    UpdateController(args.port).start()
+    
+    addresses = []
+    for t in args.targets.split(';'):
+        addresses.append(t.strip())
+    UpdateController().start(addresses)
     if logprocess:
         logprocess.terminate()
     

@@ -1,88 +1,143 @@
 import argparse
 import subprocess,re
 import ntpath
+class CallNode:
+    def __init__(self, func, hit = 0, callee = [], caller = None, time = 0):
+        self.func = func
+        self.hit = hit
+        self.callee = set()
+        self.caller = caller
+        self.time_ = time
+
+    def print(self):
+        print(self.func, self.hit, self.callee, self.caller, self.time_)
+
+
+    def rec_print(self, n=0):
+        #if n>5:
+        #    return
+        print_stack = []
+        print_stack.append([self, 0])
+        while len(print_stack) != 0:
+            fnode, count = print_stack.pop()
+            print(count*"\t", fnode.func)
+            for c in fnode.callee:
+                print_stack.append([c, count+1])
+
+
+class Callgraph:
+    def __init__(self, roots = {}):
+        self.roots = roots
+
+    def print(self):
+        for th in self.roots:
+            self.roots[th].rec_print(0)
+    
+
 
 def process_func_logs(logfile='/tmp/pyliveupdate.log', 
                       output='pyliveupdate.folded',
                      output2='pyliveupdate.summary'):
     logs = open(logfile).readlines()
     thread_stack = {}
-    thread_stack_time = {}
+    thread_stack_node = {}
+    thread_stack_str = {}
+    
     for i, line in enumerate(logs):
         log = [l.strip() for l in line.split(';')]
         thread_ = '{}-{}'.format(log[2], log[3])
         func_name = '{}.{}'.format(log[7], log[8])
+        #print('{}-{}'.format(func_name, log[9]))
+        stack_node = thread_stack_node.get(thread_, {})
+        if stack_node == {}:
+            stack_node["#root"] = CallNode("#root")
+            thread_stack_node[thread_] = stack_node
         stack_ = thread_stack.get(thread_, [])
+        if stack_ == []:
+            thread_stack[thread_] = []
+            thread_stack[thread_].append(thread_stack_node[thread_]["#root"])
+        stackstr = thread_stack_str.get(thread_, None) # if start ""
+        if stackstr == None:
+            thread_stack_str[thread_] = []
         if log[9] == 'func_begin':
-            stack_.append(func_name)
+            thread_stack_str[thread_].append(func_name)
+            stackstr = ";".join(thread_stack_str[thread_])
+            func_node = thread_stack_node[thread_].get(stackstr,  None)
+            if func_node == None:
+                func_node = CallNode(func_name)
+                thread_stack_node[thread_][stackstr] = func_node
+            func_node.caller = thread_stack[thread_][-1]
+            thread_stack[thread_][-1].callee.add(func_node)
+            thread_stack[thread_].append(func_node)
+            #thread_stack[thread_][-2].print()
+            #print("65: ", thread_stack_str)
         elif log[9] == 'func_end':
-            stackstr = ';'.join(stack_)
-            time_ = float(log[10])
-            stack_time = thread_stack_time.get(thread_, {})
-            times_ = stack_time.get(stackstr, [])
-            times_.append(time_)
-            stack_time[stackstr] = times_
-            thread_stack_time[thread_] = stack_time
-            if len(stack_) > 0:
-                stack_.pop()
+            while len(thread_stack[thread_]) > 1:
+                if thread_stack[thread_][-1].func == func_name:
+                    break
+                thread_stack[thread_].pop()
+                thread_stack_str[thread_].pop()
+            if len(thread_stack[thread_]) == 1:
+                print('Warning: Mismatch line {}: {}'.format(i, line))
+                #return
             else:
-                print('mismatch line {}: {}'.format(i, line))
-        thread_stack[thread_] = stack_
+                stackstr = ";".join(thread_stack_str[thread_])
+                time_ = float(log[10])
+                func_node = thread_stack_node[thread_].get(stackstr)            
+                func_node.time_ += time_
+                func_node.hit += 1
+                thread_stack[thread_].pop()
+                thread_stack_str[thread_].pop()
+                #print("67: ", thread_stack_str)
+                #stack_time[stackstr] = times_
+                #thread_stack_time[thread_] = stack_time
+        #thread_stack_node[thread_]["#root"].rec_print()
+    for th in thread_stack:
+        if len(thread_stack[th]) > 1:
+            print('Warning: Mismatch pairs for process{}'.format(th))
+            #return
+    cg_dict = {}
+    for th in thread_stack_node:
+        root_node = thread_stack_node[th]["#root"]
+        cg_dict[th] = root_node
+    cg = Callgraph(cg_dict)
+    #cg.print()
+
+    f = open(output, 'w')
+    f_sum = open(output2, 'w')
+    for th in thread_stack_node:
+        folded_stack = []
+        stackstr = []
+        f.write(th+' '+str(0)+'\n')
+        f_sum.write(th+'\n')
+        f_sum.write('function  hit  time/hit (ms)\n')
+        stackstr.append(th)
+        folded_stack.append([thread_stack_node[th]['#root'], False])
+        while(len(folded_stack)):
+            current, visit = folded_stack[-1]
+            if not visit:
+                #print('137:', current.func, visit)
+                if current.func[0] != '#' and current.hit != 0:
+                    tmp_str = (len(stackstr)-1)*'  '
+                    tmp_str += '-' if len(stackstr) > 1 else ''
+                    tmp_str +=  format('%s %d %.3f\n'%(current.func, current.hit, current.time_))
+                    f_sum.write(tmp_str)
+                    current.func += '`hit' + str(current.hit)
+                    stackstr.append(current.func)
+                folded_stack[-1][1] = True
+                for c in current.callee:
+                    #print('APPEND:', c)
+                    folded_stack.append([c, False])
+            else:
+                #print('145:', current.func, visit)
+                # pop it out
+                current, visit = folded_stack.pop()
+                if current.func[0] != '#' and current.hit != 0:
+                    f.write(";".join(stackstr)+' '+ str(current.time_)+'\n')
+                    stackstr.pop()
+    f.close()
+    f_sum.close()
     results = {}
-    
-    with open(output2, 'w') as fout:
-        for t, stack_time in thread_stack_time.items():
-            result = []
-            for s, st in stack_time.items():
-                result.append((s,len(st),sum(st)/len(st)))
-            result = sorted(result, key=lambda x: x[0])
-            results[t] = result
-            fout.write('{}\n'.format(t))
-            fout.write('function  hit  time/hit (ms)\n')
-            stack_ = []
-            ident = 0
-            for r in result:
-                s = r[0]
-                while len(stack_) > 0 and not s.startswith(stack_[-1]+';'):
-                    stack_.pop()
-                    ident -= 1
-                if len(stack_)>0 and s.startswith(stack_[-1]):
-                    olds = s
-                    s = re.sub('^{};'.format(stack_[-1]), '', s)
-                    stack_.append(olds)
-                else:
-                    ident = 0
-                    stack_.append(s)
-
-                if ident == 0:
-                    fout.write('{} {}  {:.3f}\n'.format(s, r[1], r[2]))
-                else:
-                    fout.write('{}-{} {}  {:.3f}\n'.format('  '*ident, s, r[1], r[2]))
-                ident += 1
-            fout.write('\n')
-
-    with open(output, 'w') as fout:
-        for t, result in results.items():
-            fout.write('{} {}\n'.format(t, 0))
-            for i, r in enumerate(result):
-                s = r[0]
-                hit = r[1]
-                time_=r[1]*r[2]
-                lasts = s
-                for j, r2 in enumerate(result[i:]):
-                    if r2[0].startswith(s+';') or r2[0] == s:
-                        if r2[0]!=s:
-                            if lasts == s:
-                                lasts = r2[0]
-                                time_ -= r2[1]*r2[2]
-                            elif not r2[0].startswith(lasts+';'):
-                                lasts = r2[0]
-                                time_ -= r2[1]*r2[2]
-                        result[i+j] = (re.sub('^'+s, '{}`hit{}'.format(s, hit), r2[0]),
-                                     r2[1], r2[2])
-                    else:
-                        break
-                fout.write('{};{} {:.3f}\n'.format(t, result[i][0], time_))
     return results
 
 def path_leaf(path):

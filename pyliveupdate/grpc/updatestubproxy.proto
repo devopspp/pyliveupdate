@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package updatestubproxy;
+
+service UpdateStubProxy {
+    rpc register(RegisterRequest) returns (RegisterResponse) {}
+    rpc eval_(EvalRequest) returns (EvalResponse) {}
+    rpc ping(PingRequest) returns (PingResponse) {}
+    rpc upload(UploadRequest) returns (UploadResponse) {}
+    rpc download(DownloadRequest) returns (DownloadResponse) {}
+}
+
+enum ReturnCode {
+    SUCCESS = 0;
+    FAILURE = 1;
+}
+
+message RegisterRequest {
+    string ip = 1;
+    string port = 2;
+}
+
+message RegisterResponse {
+    ReturnCode returncode = 1;
+}
+
+message EvalRequest {
+    string expression = 1;
+}
+
+message EvalResponse {
+    string result = 1;
+    ReturnCode returncode = 2;
+}
+
+message PingRequest{
+}
+
+message PingResponse{
+    string result = 1;
+    ReturnCode returncode = 2;
+}
+
+message UploadRequest{
+    string filename = 1;
+    string filecontent = 2;
+}
+
+message DownloadRequest{
+    string filename = 1;
+}
+
+message UploadResponse{
+    ReturnCode returncode = 1;
+}
+
+message DownloadResponse{
+    ReturnCode returncode = 1;
+    string filename = 2;
+    string filecontent = 3;
+}

@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='updatestub',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x10updatestub.proto\x12\nupdatestub\"%\n\x0fSendEvalRequest\x12\x12\n\nexpression\x18\x01 \x01(\t\"N\n\x10SendEvalResponse\x12\x0e\n\x06result\x18\x01 \x01(\t\x12*\n\nreturncode\x18\x02 \x01(\x0e\x32\x16.updatestub.ReturnCode*&\n\nReturnCode\x12\x0b\n\x07SUCCESS\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x32V\n\nRemoteEval\x12H\n\tsend_eval\x12\x1b.updatestub.SendEvalRequest\x1a\x1c.updatestub.SendEvalResponse\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n\x10updatestub.proto\x12\nupdatestub\"!\n\x0b\x45valRequest\x12\x12\n\nexpression\x18\x01 \x01(\t\"J\n\x0c\x45valResponse\x12\x0e\n\x06result\x18\x01 \x01(\t\x12*\n\nreturncode\x18\x02 \x01(\x0e\x32\x16.updatestub.ReturnCode\"\r\n\x0bPingRequest\"J\n\x0cPingResponse\x12\x0e\n\x06result\x18\x01 \x01(\t\x12*\n\nreturncode\x18\x02 \x01(\x0e\x32\x16.updatestub.ReturnCode*&\n\nReturnCode\x12\x0b\n\x07SUCCESS\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x32\x87\x01\n\nRemoteEval\x12<\n\x05\x65val_\x12\x17.updatestub.EvalRequest\x1a\x18.updatestub.EvalResponse\"\x00\x12;\n\x04ping\x12\x17.updatestub.PingRequest\x1a\x18.updatestub.PingResponse\"\x00\x62\x06proto3')
 )
 
 _RETURNCODE = _descriptor.EnumDescriptor(
@@ -41,8 +41,8 @@ _RETURNCODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=151,
-  serialized_end=189,
+  serialized_start=234,
+  serialized_end=272,
 )
 _sym_db.RegisterEnumDescriptor(_RETURNCODE)
 
@@ -52,15 +52,15 @@ FAILURE = 1
 
 
 
-_SENDEVALREQUEST = _descriptor.Descriptor(
-  name='SendEvalRequest',
-  full_name='updatestub.SendEvalRequest',
+_EVALREQUEST = _descriptor.Descriptor(
+  name='EvalRequest',
+  full_name='updatestub.EvalRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='expression', full_name='updatestub.SendEvalRequest.expression', index=0,
+      name='expression', full_name='updatestub.EvalRequest.expression', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -79,26 +79,26 @@ _SENDEVALREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=32,
-  serialized_end=69,
+  serialized_end=65,
 )
 
 
-_SENDEVALRESPONSE = _descriptor.Descriptor(
-  name='SendEvalResponse',
-  full_name='updatestub.SendEvalResponse',
+_EVALRESPONSE = _descriptor.Descriptor(
+  name='EvalResponse',
+  full_name='updatestub.EvalResponse',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='result', full_name='updatestub.SendEvalResponse.result', index=0,
+      name='result', full_name='updatestub.EvalResponse.result', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='returncode', full_name='updatestub.SendEvalResponse.returncode', index=1,
+      name='returncode', full_name='updatestub.EvalResponse.returncode', index=1,
       number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -116,29 +116,108 @@ _SENDEVALRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=71,
-  serialized_end=149,
+  serialized_start=67,
+  serialized_end=141,
 )
 
-_SENDEVALRESPONSE.fields_by_name['returncode'].enum_type = _RETURNCODE
-DESCRIPTOR.message_types_by_name['SendEvalRequest'] = _SENDEVALREQUEST
-DESCRIPTOR.message_types_by_name['SendEvalResponse'] = _SENDEVALRESPONSE
+
+_PINGREQUEST = _descriptor.Descriptor(
+  name='PingRequest',
+  full_name='updatestub.PingRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=143,
+  serialized_end=156,
+)
+
+
+_PINGRESPONSE = _descriptor.Descriptor(
+  name='PingResponse',
+  full_name='updatestub.PingResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='result', full_name='updatestub.PingResponse.result', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='returncode', full_name='updatestub.PingResponse.returncode', index=1,
+      number=2, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=158,
+  serialized_end=232,
+)
+
+_EVALRESPONSE.fields_by_name['returncode'].enum_type = _RETURNCODE
+_PINGRESPONSE.fields_by_name['returncode'].enum_type = _RETURNCODE
+DESCRIPTOR.message_types_by_name['EvalRequest'] = _EVALREQUEST
+DESCRIPTOR.message_types_by_name['EvalResponse'] = _EVALRESPONSE
+DESCRIPTOR.message_types_by_name['PingRequest'] = _PINGREQUEST
+DESCRIPTOR.message_types_by_name['PingResponse'] = _PINGRESPONSE
 DESCRIPTOR.enum_types_by_name['ReturnCode'] = _RETURNCODE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-SendEvalRequest = _reflection.GeneratedProtocolMessageType('SendEvalRequest', (_message.Message,), {
-  'DESCRIPTOR' : _SENDEVALREQUEST,
+EvalRequest = _reflection.GeneratedProtocolMessageType('EvalRequest', (_message.Message,), {
+  'DESCRIPTOR' : _EVALREQUEST,
   '__module__' : 'updatestub_pb2'
-  # @@protoc_insertion_point(class_scope:updatestub.SendEvalRequest)
+  # @@protoc_insertion_point(class_scope:updatestub.EvalRequest)
   })
-_sym_db.RegisterMessage(SendEvalRequest)
+_sym_db.RegisterMessage(EvalRequest)
 
-SendEvalResponse = _reflection.GeneratedProtocolMessageType('SendEvalResponse', (_message.Message,), {
-  'DESCRIPTOR' : _SENDEVALRESPONSE,
+EvalResponse = _reflection.GeneratedProtocolMessageType('EvalResponse', (_message.Message,), {
+  'DESCRIPTOR' : _EVALRESPONSE,
   '__module__' : 'updatestub_pb2'
-  # @@protoc_insertion_point(class_scope:updatestub.SendEvalResponse)
+  # @@protoc_insertion_point(class_scope:updatestub.EvalResponse)
   })
-_sym_db.RegisterMessage(SendEvalResponse)
+_sym_db.RegisterMessage(EvalResponse)
+
+PingRequest = _reflection.GeneratedProtocolMessageType('PingRequest', (_message.Message,), {
+  'DESCRIPTOR' : _PINGREQUEST,
+  '__module__' : 'updatestub_pb2'
+  # @@protoc_insertion_point(class_scope:updatestub.PingRequest)
+  })
+_sym_db.RegisterMessage(PingRequest)
+
+PingResponse = _reflection.GeneratedProtocolMessageType('PingResponse', (_message.Message,), {
+  'DESCRIPTOR' : _PINGRESPONSE,
+  '__module__' : 'updatestub_pb2'
+  # @@protoc_insertion_point(class_scope:updatestub.PingResponse)
+  })
+_sym_db.RegisterMessage(PingResponse)
 
 
 
@@ -148,16 +227,25 @@ _REMOTEEVAL = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=191,
-  serialized_end=277,
+  serialized_start=275,
+  serialized_end=410,
   methods=[
   _descriptor.MethodDescriptor(
-    name='send_eval',
-    full_name='updatestub.RemoteEval.send_eval',
+    name='eval_',
+    full_name='updatestub.RemoteEval.eval_',
     index=0,
     containing_service=None,
-    input_type=_SENDEVALREQUEST,
-    output_type=_SENDEVALRESPONSE,
+    input_type=_EVALREQUEST,
+    output_type=_EVALRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ping',
+    full_name='updatestub.RemoteEval.ping',
+    index=1,
+    containing_service=None,
+    input_type=_PINGREQUEST,
+    output_type=_PINGRESPONSE,
     serialized_options=None,
   ),
 ])

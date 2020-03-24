@@ -27,13 +27,12 @@ class TargetFilter(object):
         else:
             objmod = sys.modules[type(obj).__module__]
         
-        ### keep __main__ ###
+        # keep __main__ 
         if objmod.__name__ == '__main__':
             return True
-        ### builtin moduel doesn't have __file__###
+        # builtin moduel doesn't have __file__
         elif hasattr(objmod, '__file__') and objmod.__file__\
             and os.path.realpath(objmod.__file__).startswith(target):
-            #print(obj, os.path.realpath(objmod.__file__), target)
             return True
         else:
             return False
@@ -68,7 +67,8 @@ class TargetFinder(object):
         return members
                     
     @classmethod
-    def _find_target_rec(cls, target_path, target_fpath, name_candidates, handled_candidates):
+    def _find_target_rec(cls, target_path, target_fpath, 
+                         name_candidates, handled_candidates):
         result = set()
         new_candidates = []
         if len(target_path) <= 0 or len(name_candidates) <= 0:
@@ -77,7 +77,7 @@ class TargetFinder(object):
         p = target_path[0]
         new_target_path = target_path[1:]
         
-        ### all matched ###
+        # all matched
         if p == '*' or p == '**':
             for name, candidate in name_candidates:
                 if id(candidate) not in handled_candidates\
@@ -137,9 +137,9 @@ class TargetFinder(object):
                 if p in dir(candidate):
                     next_candidate = getattr(candidate, p)
                     
-                    ### make sure next candidate is a module
-                    ### and it is the submodule of candidate
-                    ### instead is imported in candidate
+                    # make sure next candidate is a module
+                    # and it is the submodule of candidate
+                    # instead is imported in candidate
                     if inspect.ismodule(next_candidate) \
                         and next_candidate.__name__.startswith(candidate.__name__):
                         candidate = next_candidate
@@ -185,7 +185,7 @@ class TargetFinder(object):
         result = set()
         
         if len(path) <= 0:
-            return result
+            return list(result)
         
         target_modules = []
         if path[0] in ['**', '*']:
@@ -201,19 +201,18 @@ class TargetFinder(object):
         else:
             target_module, path = cls._split_module_object(target_name)
             if not target_module:
-                return result
+                return list(result)
 
             if path == []:
                 result.add(target_module)
-                return result
+                return list(result)
 
             target_filepath = cls._get_module_path(target_module)
             target_modules = [target_module]
         
         for target_module in target_modules:
-            #print(target_module.__name__)
             name_candidates = cls._getmembers(target_module, target_module.__name__)
             result.update(TargetFinder._find_target_rec(path, target_filepath, name_candidates, set()))
-        return result
+        return list(result)
     
     

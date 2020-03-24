@@ -1,14 +1,28 @@
-from pyliveupdate import *
-from pyliveupdatescripts import *
+from pyliveupdate.update import UpdateManager
+from collections.abc import Iterable
 
 class UpdateBase():
     @staticmethod
     def apply(updateid):
-        UpdateManager.apply_update(updateid)
+        '''
+        apply one or a list of update by id
+        updateid: int or list of int
+        '''
+        if not isinstance(updateid, Iterable):
+            updateid = [updateid]
+        for id_ in updateid:
+            UpdateManager.apply_update(id_)
     
     @staticmethod
     def revert(updateid):
-        UpdateManager.revert_update(updateid)
+        '''
+        revert one or a list of update by id
+        updateid: int or list of int
+        '''
+        if not isinstance(updateid, Iterable):
+            updateid = [updateid]
+        for id_ in updateid:
+            UpdateManager.revert_update(id_)
     
     @staticmethod
     def ls():
@@ -16,7 +30,6 @@ class UpdateBase():
             if update.applied:
                 print()
                 print(updateid, ':', update)
-            print()
     
     @staticmethod
     def register_builtin(vars_):
@@ -28,5 +41,6 @@ class UpdateBase():
             if __builtins__.get(item) == None and item[:2] != '__':
 #                 print('ADD TO BUILTIN:', item)
                 __builtins__[item] = vars_[item]
-                
+
+LU = UpdateBase
 UpdateBase.register_builtin(globals())

@@ -1,6 +1,7 @@
 import pickle, os
 import logging, logging.handlers
 import socketserver, struct
+from pyliveupdate.config import LOG_SERVER_IP, LOG_SERVER_PORT, LOG_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,7 @@ class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
                 self.handle_request()
             abort = self.abort
 
-def start_logger(host='localhost',
-                 port=logging.handlers.DEFAULT_TCP_LOGGING_PORT, logfile='/tmp/pyliveupdate.log'):
+def start_log_server(host=LOG_SERVER_IP, port=LOG_SERVER_PORT, logfile=LOG_FILE):
     # f_handler = logging.FileHandler(logfile, 'w')
     f_handler = logging.handlers.RotatingFileHandler(logfile, backupCount=50)
     f_handler.doRollover()

@@ -1,4 +1,5 @@
 import logging, logging.handlers, queue, time, os, sys
+from pyliveupdate.config import LOG_SERVER_IP, LOG_SERVER_PORT
 
 class mysocketHandler(logging.handlers.SocketHandler):
     def emit(self, record):
@@ -9,7 +10,7 @@ class mysocketHandler(logging.handlers.SocketHandler):
         except Exception:
             self.handleError(record)
             
-def get_remote_logger(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT):
+def get_remote_logger(host=LOG_SERVER_IP, port=LOG_SERVER_PORT):
     que = queue.Queue(-1)  # no limit on size
     queue_handler = logging.handlers.QueueHandler(que)
 

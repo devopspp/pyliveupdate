@@ -1,5 +1,6 @@
-from pyliveupdate import *
-from pyliveupdatescripts import *
+from pyliveupdate.update import Instrument, UpdateManager
+from pyliveupdate.stub import remote_logger, local_logger
+from pyliveupdatescripts.updatebase import UpdateBase
 import time
 
 class FuncProfiler(UpdateBase):
@@ -22,10 +23,9 @@ class FuncProfiler(UpdateBase):
         if isinstance(scope, str):
             scopes = [scope]
         for scope in scopes:
-            update = Update('instrument', scope, 
+            update = Instrument(scope, 
                             {'func_begin': FuncProfiler._func_begin, 
-                             'func_end': FuncProfiler._func_end},
-                           None, None, __name__)
+                             'func_end': FuncProfiler._func_end})
             UpdateManager.apply_update(update)
 
 FP = FuncProfiler

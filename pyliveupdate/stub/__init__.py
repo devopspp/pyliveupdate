@@ -2,5 +2,5 @@
 This package contains necessary modules running in the target program
 '''
 
-from .updatestub import *
-from .logclient import *
+from .updatestub import UpdateStub
+from .logclient import remote_logger, local_logger
