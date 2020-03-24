@@ -1,4 +1,4 @@
-# pyliveupdate
+# PyLiveUpdate
 `PyLiveUpdate` is tool to help you modify your running python code without stopping it.
 It is useful for modifying long-running server programs in production with zero downtime.
 Some modification scenario includes: inject code to profile the runtime of certain lines of code;
@@ -52,3 +52,10 @@ update = Redefine('__main__', None, {'__main__.bar':new_bar})
 UpdateManager.apply_update(update)
 ```
 The code redefines `__main__.bar` with `new_bar`.
+
+# Revert the modification
+PyLiveUpdate also support to revert a modification on the fly:
+```
+> LU.ls() # list all modification
+> LU.revert(1) # revert modifation with id 1
+```
