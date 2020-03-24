@@ -1,5 +1,4 @@
 from pyliveupdate.update import Redefine, UpdateManager
-from pyliveupdatescripts.updatebase import UpdateBase
 from module2 import double
 
 def predefine():
