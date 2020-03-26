@@ -48,7 +48,7 @@ UpdateManager.apply_update(update)
 The code injects a `print(a)` in line 12 and 14 in function `__main__.bar`.
 #### Redefine (patch) existing functions
 ```
-from pyliveupdate.update import Instrument, UpdateManager
+from pyliveupdate.update import Redefine, UpdateManager
 
 def new_bar(a):
     print('new_bar', a)
