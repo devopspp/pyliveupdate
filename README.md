@@ -22,7 +22,7 @@ Start a controller to modify it!
 ```
 Some predefined modification available in the controller
 ```
-> FuncProfiler.profile('__main__.**') # inject execution time profiling code into all functions in __main__
+> FuncProfiler.profile(['__main__.**', 'module1.**']) # inject execution time profiling code into all functions in __main__ and module1
 > LineProfiler.profile('__main__.bar', [11, 12]) # inject time profiling code into certain lines
 > FuncDebugger.debug('__main__.bar') # inject code to print out function parameter and return value
 > LineDebugger.debug('__main__.bar', [11, 12]) # inject code to print out variables in certain lines
@@ -63,4 +63,30 @@ PyLiveUpdate also support to revert a modification on the fly:
 ```
 > LU.ls() # list all modification
 > LU.revert(1) # revert modifation with id 1
+```
+# Extended tools
+PyLiveUpdate also comes with some handy tools based on it:
+
+## Profiler
+Dynamically choose functions or lines to profile and show the result with a flamegraph.
+1. Start your program with PyLiveUpdate enabled, like `example/patch.py`.
+2. Start a controller `pylu-controller -l 127.0.0.1:50050`
+3. Start profiling functions with `FP.profile(['__main__.**', 'module1.**'])` or lines with `LineProfiler.profile('__main__.bar', [11, 12])`.
+4. Process the logs with `pylu-processlogs -i /tmp/pyliveupdate.log` in another terminal
+It will generated a flamegraph and a summary:
+
+#### Flamegraph
+![alt text](examples/pyliveupdate.log.svg)
+
+#### Function call summary
+The following summary gives in process `4510` thread `5`, `views.results` was called `10` times and each time takes `139 ms`, `views.results` called `manager.all` for `20` times.
+```
+4510-Thread-5
+function  hit  time/hit (ms)
+views.results 10  138.562
+  -manager.all 20  14.212
+    -__init__.__hash__ 10  0.035
+    -manager.get_queryset 20  0.922
+      -query.__init__ 20  0.616
+        -query.__init__ 20  0.071
 ```
