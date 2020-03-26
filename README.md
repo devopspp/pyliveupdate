@@ -32,7 +32,7 @@ You can also define your own customized modifications.
 
 # Customized modification
 There are in general two kinds of modification: instrument and redefine.
-You can define them as following and apply with `patch('patch.py')`.
+You can define them as following and apply with `patch('patch.py')`. Try it out with `example/patch.py`.
 
 #### Instrument code into existing functions
 ```
