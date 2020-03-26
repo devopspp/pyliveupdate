@@ -22,7 +22,7 @@ Start a controller to modify it!
 ```
 Some predefined modification available in the controller
 ```
-> FuncProfiler.profile('__main__.**') # inject the time profiling code into all functions in __main__
+> FuncProfiler.profile('__main__.**') # inject execution time profiling code into all functions in __main__
 > LineProfiler.profile('__main__.bar', [11, 12]) # inject time profiling code into certain lines
 > FuncDebugger.debug('__main__.bar') # inject code to print out function parameter and return value
 > LineDebugger.debug('__main__.bar', [11, 12]) # inject code to print out variables in certain lines
