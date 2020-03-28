@@ -4,13 +4,13 @@ It is useful for modifying long-running server programs in production with zero 
 Some modification scenario includes: inject code to profile the runtime of certain lines of code;
 inject code to print out a variable for debugging; apply a patch without restarting.
 
-# Install
+## Install
 
 ```
 pip install pyliveupdate
 ```
 
-# How to use
+## How to use
 Put these two lines of code in your server program and run it. Try it out with `example/program1.py`. 
 ```
 from pyliveupdatescripts import UpdateStub
@@ -30,7 +30,7 @@ Some predefined modification available in the controller
 ```
 You can also define your own customized modifications.
 
-# Customized modification
+## Customized modification
 There are in general two kinds of modification: instrument and redefine.
 You can define them as following and apply with `patch('patch.py')`. Try it out with `example/patch.py`.
 
@@ -58,16 +58,16 @@ UpdateManager.apply_update(update)
 ```
 The code redefines `__main__.bar` with `new_bar`.
 
-# Revert the modification
+## Revert the modification
 PyLiveUpdate also support to revert a modification on the fly:
 ```
 > LU.ls() # list all modification
 > LU.revert(1) # revert modifation with id 1
 ```
-# Extended tools
+## Extended tools
 PyLiveUpdate also comes with some handy tools based on it:
 
-## Profiler
+### Profiler
 Dynamically choose functions or lines to profile and show the result with a flamegraph.
 1. Start your program with PyLiveUpdate enabled, like `example/patch.py`.
 2. Start a controller `pylu-controller -l 127.0.0.1:50050`
