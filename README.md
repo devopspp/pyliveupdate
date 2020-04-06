@@ -28,6 +28,8 @@ Some predefined modification available in the controller
 > LineDebugger.debug('__main__.bar', [11, 12]) # inject code to print out variables in certain lines
 > VarDebugger.debug('__main__.bar', 'b') # inject code to print out all values of a variable in different statements
 ```
+
+These will print out corresponding profiling and debugging info in the program terminal and in `/tmp/pyliveupdate`.
 You can also define your own customized modifications.
 
 ## Customized modification
