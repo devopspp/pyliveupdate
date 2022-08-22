@@ -92,3 +92,16 @@ views.results 10  138.562
       -query.__init__ 20  0.616
         -query.__init__ 20  0.071
 ```
+
+## Citation
+Please kindly cite our work as follows if you want to refer to it in any writing:
+
+```
+@inproceedings{huang2021pylive,
+  title={$\{$PYLIVE$\}$:$\{$On-the-Fly$\}$ Code Change for Python-based Online Services},
+  author={Huang, Haochen and Xiang, Chengcheng and Zhong, Li and Zhou, Yuanyuan},
+  booktitle={2021 USENIX Annual Technical Conference (USENIX ATC 21)},
+  pages={349--363},
+  year={2021}
+}
+```
